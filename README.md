@@ -43,7 +43,7 @@ Shelly-Passwort: Das Passwort, welches du in der Mongoose-Firmware für deine Ge
 IP-Range: Gib dein Subnetz an (z. B. 192.168.1.0/24) oder einen Bereich (192.168.1.10-20).
 
 
-<img width="1429" height="961" alt="image" src="https://github.com/user-attachments/assets/f9eeeebd-ab1e-4b2a-86c0-7e9d05648da2" />
+<img width="1355" height="948" alt="image" src="https://github.com/user-attachments/assets/549b8705-9ed2-40dd-b276-b6b806d52012" />
 
 
 

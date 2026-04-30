@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Einstellungen - Shelly Manager</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
+</head>
+<body>
+    <div class="container d-flex align-items-center justify-content-center" style="min-height: 80vh;">
+        <div class="card p-4 shadow" style="width: 100%; max-width: 450px;">
+            <h3 class="mb-4 text-center fw-bold">Konfiguration</h3>
+            
+            {% if message %}
+            <div class="alert alert-success bg-success text-white border-0 py-2 small mb-4">{{ message }}</div>
+            {% endif %}
+            
+            <form action="/settings" method="post">
+                <div class="mb-4">
+                    <label class="form-label">Scan-Bereich / Subnetz</label>
+                    <input type="text" name="ip_range" class="form-control" value="{{ ip_range }}" placeholder="z.B. 192.168.1.0/24">
+                </div>
+                <div class="mb-4">
+                    <label class="form-label">Zentrales Shelly Passwort</label>
+                    <input type="password" name="shelly_password" class="form-control" value="{{ shelly_pwd }}" placeholder="Passwort eingeben">
+                </div>
+                <hr class="my-4" style="border-color: var(--border);">
+                <div class="mb-4">
+                    <label class="form-label">Admin Passwort ändern</label>
+                    <input type="password" name="admin_password" class="form-control" placeholder="Nur bei Änderung ausfüllen">
+                </div>
+                
+                <button type="submit" class="btn btn-primary w-100">EINSTELLUNGEN SPEICHERN</button>
+                <a href="/" class="btn-back">← Zurück zum Dashboard</a>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

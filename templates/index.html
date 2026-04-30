@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard - Shelly Manager</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+</head>
+<body>
+    <nav class="navbar navbar-dark fixed-top shadow">
+        <div class="container">
+            <span class="navbar-brand fw-bold">SHELLY <span class="text-primary">MANAGER</span></span>
+            <div class="d-flex align-items-center">
+                <span class="badge bg-dark border border-secondary me-3 p-2">
+                    Latest FW: {{ latest_v if latest_v else 'Pruefung...' }}
+                </span>
+                <button class="btn btn-sm btn-primary me-2" id="scanBtn" onclick="runScan()">NETZWERK SCAN</button>
+                <a href="/settings" class="btn btn-sm btn-outline-light me-2">SETUP</a>
+                <a href="/logout" class="btn btn-sm btn-danger">LOGOUT</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div id="scanStatus" class="alert alert-info d-none mb-4">Scan laeuft... Bitte warten.</div>
+        
+        <div class="row g-4" id="device-grid">
+            {% for d in devices %}
+            <div class="col-md-6 col-lg-4 device-card" data-ip="{{ d.ip }}">
+                <div class="card h-100 shadow-sm">
+                    <div class="card-body p-4">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <h5 class="card-title mb-0">{{ d.name }}</h5>
+                            <span class="small fw-bold">
+                                <span class="status-dot {% if d.status == 'Online' %}online{% else %}offline{% endif %}"></span>
+                                {{ d.status }}
+                            </span>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <a href="http://{{ d.ip }}" target="_blank" class="device-ip-link">IP: {{ d.ip }}</a>
+                        </div>
+
+                        {% if d.status == 'Online' %}
+                        <div class="info-box mb-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span>Firmware:</span>
+                                {% if not d.fw_ok %}
+                                <button class="btn btn-link p-0 text-warning fw-bold text-decoration-none" onclick="startUpdate('{{ d.ip }}')">
+                                    {{ d.version }} (Update!)
+                                </button>
+                                {% else %}
+                                <span class="text-success fw-bold">{{ d.version }}</span>
+                                {% endif %}
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span>Signal:</span>
+                                <span class="{% if d.rssi < -75 %}text-danger{% elif d.rssi < -60 %}text-warning{% else %}text-success{% endif %} fw-bold">
+                                    {{ d.rssi }} dBm
+                                </span>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span>Uptime:</span>
+                                <span class="uptime-display" data-seconds="{{ d.uptime }}">{{ d.uptime_str }}</span>
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-{% if d.ison %}success{% else %}warning{% endif %} flex-grow-1 fw-bold" 
+                                    onclick="sendCmd('{{ d.ip }}', 'state', '{% if d.ison %}off{% else %}on{% endif %}')">
+                                {% if d.ison %}AN{% else %}AUS{% endif %}
+                            </button>
+                            <button class="btn btn-outline-light" onclick="sendCmd('{{ d.ip }}', 'reboot')">REBOOT</button>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <script>
+    // Live Uptime Counter
+    function formatTime(s) {
+        let y = Math.floor(s / (3600 * 24 * 365));
+        s %= (3600 * 24 * 365);
+        let mo = Math.floor(s / (3600 * 24 * 30));
+        s %= (3600 * 24 * 30);
+        let d = Math.floor(s / (3600 * 24));
+        s %= (3600 * 24);
+        let h = Math.floor(s / 3600);
+        s %= 3600;
+        let m = Math.floor(s / 60);
+        let sec = s % 60;
+
+        let res = [];
+        if (y > 0) res.push(y + "J");
+        if (mo > 0) res.push(mo + "M");
+        if (d > 0) res.push(d + "T");
+        if (h > 0) res.push(h + "Std");
+        
+        let ts = String(m).padStart(2, '0') + ":" + String(sec).padStart(2, '0');
+        return res.length > 0 ? res.join(", ") + ", " + ts : ts;
+    }
+
+    setInterval(() => {
+        document.querySelectorAll('.uptime-display').forEach(el => {
+            let s = parseInt(el.getAttribute('data-seconds')) + 1;
+            el.setAttribute('data-seconds', s);
+            el.innerText = formatTime(s);
+        });
+    }, 1000);
+
+    const grid = document.getElementById('device-grid');
+    new Sortable(grid, {
+        animation: 150,
+        ghostClass: 'sortable-ghost',
+        onEnd: function() {
+            const order = [];
+            document.querySelectorAll('.device-card').forEach(el => {
+                order.push(el.getAttribute('data-ip'));
+            });
+            fetch('/update_order', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({order: order})
+            });
+        }
+    });
+
+    function runScan() {
+        document.getElementById('scanBtn').disabled = true;
+        document.getElementById('scanStatus').classList.remove('d-none');
+        fetch('/scan', {method: 'POST'}).then(() => location.reload());
+    }
+
+    function startUpdate(ip) {
+        if (!confirm('Möchtest du das Firmware-Update für ' + ip + ' wirklich starten?')) return;
+        fetch('/update_device', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ip: ip})
+        }).then(res => res.json()).then(data => {
+            if (data.success) { alert('Update gestartet!'); location.reload(); }
+            else { alert('Fehler: ' + data.error); }
+        });
+    }
+
+    function sendCmd(ip, action, val = null) {
+        fetch('/control', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ip: ip, action: action, value: val})
+        }).then(() => setTimeout(() => location.reload(), 600));
+    }
+    </script>
+</body>
+</html>

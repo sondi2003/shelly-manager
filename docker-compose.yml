@@ -1,0 +1,19 @@
+services:
+  shelly-manager-admin:
+    image: python:3.11-slim
+    container_name: shelly-manager-admin
+    restart: unless-stopped
+    ports:
+      # Der Port wird nun von außen steuerbar
+      - "${HOST_PORT}:5000"
+    volumes:
+      # Die Pfade auf deinem Host-System werden variabel
+      - ${APP_DATA_PATH}:/app
+      - ${APP_DB_PATH}:/app/data
+    working_dir: /app
+    environment:
+      # Hier kannst du Variablen an dein Python-Skript weitergeben
+      - DB_PASSWORD=${DB_PASSWORD}
+      - FLASK_ENV=${FLASK_ENV}
+    command: >
+      sh -c "pip install flask requests && python app.py"

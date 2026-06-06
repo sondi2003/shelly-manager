@@ -1,7 +1,13 @@
-import os, sqlite3, requests, json, concurrent.futures, ipaddress, time, logging
+import os, sqlite3, requests, json, concurrent.futures, ipaddress, time, logging, socket
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 from requests.auth import HTTPDigestAuth
 from werkzeug.security import generate_password_hash, check_password_hash
+try:
+    from zeroconf import ServiceBrowser, Zeroconf
+    MDNS_AVAILABLE = True
+except ImportError:
+    MDNS_AVAILABLE = False
+    logging.warning("zeroconf nicht installiert — mDNS-Scan nicht verfügbar.")
 
 # Logging fuer Docker konfigurieren
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s: %(message)s')
@@ -47,7 +53,7 @@ def init_db():
     if not conn.execute('SELECT * FROM users WHERE username = "admin"').fetchone():
         conn.execute('INSERT INTO users (username, password) VALUES (?, ?)', ('admin', generate_password_hash('admin')))
     
-    defaults = {"shelly_password": "", "ip_range": "192.168.11.2-192.168.11.12"}
+    defaults = {"shelly_password": "", "ip_range": "192.168.11.2-192.168.11.12", "scan_mode": "ip"}
     for key, value in defaults.items():
         if not conn.execute('SELECT * FROM config WHERE key = ?', (key,)).fetchone():
             conn.execute('INSERT INTO config (key, value) VALUES (?, ?)', (key, value))
@@ -190,27 +196,38 @@ def update_device():
 @app.route('/scan', methods=['POST'])
 def scan():
     if not session.get('logged_in'): return jsonify({"success": False}), 403
-    raw_range = get_config("ip_range")
-    ip_input = raw_range.replace("DEBUG_UPDATE", "").strip()
-    all_ips = []
-    try:
-        if '/' in ip_input:
-            network = ipaddress.ip_network(ip_input, strict=False)
-            all_ips = [str(ip) for ip in network.hosts()]
-        elif '-' in ip_input:
-            parts = ip_input.split('-')
-            start_ip = ipaddress.IPv4Address(parts[0].strip())
-            end_ip = ipaddress.IPv4Address(parts[1].strip()) if '.' in parts[1] else ipaddress.IPv4Address(f"{'.'.join(parts[0].split('.')[:-1])}.{parts[1].strip()}")
-            for ip_int in range(int(start_ip), int(end_ip) + 1):
-                all_ips.append(str(ipaddress.IPv4Address(ip_int)))
-    except Exception as e:
-        logging.error(f"Ungültiger IP-Bereich '{ip_input}': {e}")
-    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
-        found = [r for r in list(executor.map(discover_shelly, all_ips)) if r is not None]
+    scan_mode = get_config("scan_mode")
+
+    if scan_mode == "mdns":
+        logging.info("Starte mDNS-Scan...")
+        found = discover_mdns(timeout=6)
+    else:
+        logging.info("Starte IP-Range-Scan...")
+        raw_range = get_config("ip_range")
+        ip_input = raw_range.replace("DEBUG_UPDATE", "").strip()
+        all_ips = []
+        try:
+            if '/' in ip_input:
+                network = ipaddress.ip_network(ip_input, strict=False)
+                all_ips = [str(ip) for ip in network.hosts()]
+            elif '-' in ip_input:
+                parts = ip_input.split('-')
+                start_ip = ipaddress.IPv4Address(parts[0].strip())
+                end_ip = ipaddress.IPv4Address(parts[1].strip()) if '.' in parts[1] else ipaddress.IPv4Address(f"{'.'.join(parts[0].split('.')[:-1])}.{parts[1].strip()}")
+                for ip_int in range(int(start_ip), int(end_ip) + 1):
+                    all_ips.append(str(ipaddress.IPv4Address(ip_int)))
+        except Exception as e:
+            logging.error(f"Ungültiger IP-Bereich '{ip_input}': {e}")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+            found = [r for r in list(executor.map(discover_shelly, all_ips)) if r is not None]
+
     conn = get_db()
-    for dev in found: conn.execute('INSERT OR IGNORE INTO devices (ip, name) VALUES (?, ?)', (dev['ip'], dev['name']))
-    conn.commit(); conn.close()
-    return jsonify({"success": True, "count": len(found)})
+    for dev in found:
+        conn.execute('INSERT OR IGNORE INTO devices (ip, name) VALUES (?, ?)', (dev['ip'], dev['name']))
+    conn.commit()
+    conn.close()
+    logging.info(f"Scan abgeschlossen: {len(found)} Gerät(e) gefunden.")
+    return jsonify({"success": True, "count": len(found), "mode": scan_mode})
 
 def discover_shelly(ip):
     pwd = get_config("shelly_password")
@@ -221,6 +238,45 @@ def discover_shelly(ip):
     except Exception as e:
         logging.debug(f"Kein Shelly auf {ip}: {e}")
     return None
+
+def discover_mdns(timeout=6):
+    """Sucht Shelly-Geräte via mDNS. Prüft _hap._tcp (HomeKit) und _http._tcp."""
+    if not MDNS_AVAILABLE:
+        logging.error("mDNS nicht verfügbar: zeroconf nicht installiert.")
+        return []
+    found_ips = set()
+    found = []
+
+    class ShellyListener:
+        def add_service(self, zc, type_, name):
+            try:
+                info = zc.get_service_info(type_, name)
+                if not info or not info.addresses:
+                    return
+                ip = socket.inet_ntoa(info.addresses[0])
+                if ip in found_ips:
+                    return
+                found_ips.add(ip)
+                result = discover_shelly(ip)
+                if result:
+                    found.append(result)
+                    logging.info(f"mDNS: Shelly gefunden auf {ip} ({name})")
+            except Exception as e:
+                logging.debug(f"mDNS Listener Fehler: {e}")
+
+        def remove_service(self, zc, type_, name): pass
+        def update_service(self, zc, type_, name): pass
+
+    zc = Zeroconf()
+    listener = ShellyListener()
+    # Mongoose-Homekit nutzt _hap._tcp; als Fallback auch _http._tcp
+    browsers = [
+        ServiceBrowser(zc, "_hap._tcp.local.", listener),
+        ServiceBrowser(zc, "_http._tcp.local.", listener),
+    ]
+    time.sleep(timeout)
+    zc.close()
+    return found
 
 @app.route('/set_group', methods=['POST'])
 def set_group():
@@ -358,9 +414,15 @@ def settings():
         if request.form.get('admin_password'): conn.execute('UPDATE users SET password = ? WHERE username = "admin"', (generate_password_hash(request.form['admin_password']),))
         conn.execute('UPDATE config SET value = ? WHERE key = "shelly_password"', (request.form.get('shelly_password'),))
         conn.execute('UPDATE config SET value = ? WHERE key = "ip_range"', (request.form.get('ip_range'),))
+        conn.execute('UPDATE config SET value = ? WHERE key = "scan_mode"', (request.form.get('scan_mode', 'ip'),))
         conn.commit(); conn.close()
         message = "Einstellungen gespeichert!"
-    return render_template('settings.html', message=message, shelly_pwd=get_config("shelly_password"), ip_range=get_config("ip_range"))
+    return render_template('settings.html',
+        message=message,
+        shelly_pwd=get_config("shelly_password"),
+        ip_range=get_config("ip_range"),
+        scan_mode=get_config("scan_mode")
+    )
 
 @app.route('/logout')
 def logout():

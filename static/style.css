@@ -129,6 +129,60 @@ body {
     background: rgba(239, 68, 68, 0.1);
 }
 
+/* Scan-Modus Umschalter */
+.scan-mode-toggle {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.scan-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 14px 10px;
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    text-align: center;
+    background: var(--bg-main);
+}
+
+.scan-option input[type="radio"] { display: none; }
+
+.scan-option:hover {
+    border-color: var(--accent);
+    background: rgba(59, 130, 246, 0.05);
+}
+
+.scan-option.active {
+    border-color: var(--accent);
+    background: rgba(59, 130, 246, 0.12);
+}
+
+.scan-icon { font-size: 1.5rem; }
+.scan-label { font-weight: 700; font-size: 0.9rem; color: var(--text-main); }
+.scan-desc  { font-size: 0.75rem; color: var(--text-muted); }
+
+.alert-mdns {
+    background: rgba(59, 130, 246, 0.08);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    border-radius: 10px;
+    padding: 14px;
+    font-size: 0.88rem;
+    color: var(--text-main);
+    line-height: 1.6;
+}
+
+.alert-mdns code {
+    background: rgba(0,0,0,0.3);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+}
+
 .group-header {
     border-bottom: 1px solid var(--border);
     padding-bottom: 10px;

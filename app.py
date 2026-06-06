@@ -38,6 +38,11 @@ def init_db():
             conn.execute('ALTER TABLE devices ADD COLUMN position INTEGER DEFAULT 0')
         except Exception as e:
             logging.warning(f"ALTER TABLE fehlgeschlagen: {e}")
+    if 'group_name' not in columns:
+        try:
+            conn.execute("ALTER TABLE devices ADD COLUMN group_name TEXT DEFAULT ''")
+        except Exception as e:
+            logging.warning(f"ALTER TABLE group_name fehlgeschlagen: {e}")
 
     if not conn.execute('SELECT * FROM users WHERE username = "admin"').fetchone():
         conn.execute('INSERT INTO users (username, password) VALUES (?, ?)', ('admin', generate_password_hash('admin')))
@@ -109,9 +114,9 @@ def get_latest_version():
     return cache["latest_version"]
 
 def get_shelly_status(args):
-    ip, db_name, latest_v = args
+    ip, db_name, latest_v, group_name = args
     pwd = get_config("shelly_password")
-    device_data = {"ip": ip, "name": db_name, "status": "Offline", "version": "-", "ison": False, "uptime": 0, "uptime_str": "-", "fw_ok": True}
+    device_data = {"ip": ip, "name": db_name, "group_name": group_name, "status": "Offline", "version": "-", "ison": False, "uptime": 0, "uptime_str": "-", "fw_ok": True}
     try:
         res = requests.get(f"http://{ip}/rpc/Shelly.GetInfoExt", auth=HTTPDigestAuth('admin', pwd), timeout=2.0)
         if res.status_code == 200:
@@ -151,12 +156,19 @@ def index():
     if not session.get('logged_in'): return redirect(url_for('login'))
     latest_v = get_latest_version()
     conn = get_db()
-    db_devices = conn.execute('SELECT ip, name FROM devices ORDER BY position ASC').fetchall()
+    db_devices = conn.execute('SELECT ip, name, group_name FROM devices ORDER BY group_name ASC, position ASC').fetchall()
     conn.close()
-    task_data = [(d['ip'], d['name'], latest_v) for d in db_devices]
+    task_data = [(d['ip'], d['name'], latest_v, d['group_name'] or '') for d in db_devices]
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
         devices = list(executor.map(get_shelly_status, task_data))
-    return render_template('index.html', devices=devices, latest_v=latest_v)
+    # Geräte nach Gruppe gruppieren: benannte Gruppen zuerst, dann ungrupierte
+    groups = {}
+    for dev in devices:
+        g = dev['group_name'] or ''
+        groups.setdefault(g, []).append(dev)
+    # Sortierung: benannte Gruppen alphabetisch, '' (keine Gruppe) ans Ende
+    sorted_groups = sorted(groups.items(), key=lambda x: (x[0] == '', x[0].lower()))
+    return render_template('index.html', sorted_groups=sorted_groups, devices=devices, latest_v=latest_v)
 
 @app.route('/update_device', methods=['POST'])
 def update_device():
@@ -209,6 +221,103 @@ def discover_shelly(ip):
     except Exception as e:
         logging.debug(f"Kein Shelly auf {ip}: {e}")
     return None
+
+@app.route('/set_group', methods=['POST'])
+def set_group():
+    if not session.get('logged_in'): return jsonify({"success": False}), 403
+    ip = request.json.get('ip')
+    group = request.json.get('group', '').strip()
+    conn = get_db()
+    conn.execute('UPDATE devices SET group_name = ? WHERE ip = ?', (group, ip))
+    conn.commit()
+    conn.close()
+    logging.info(f"Gerät {ip} in Gruppe '{group}' verschoben.")
+    return jsonify({"success": True})
+
+@app.route('/control_group', methods=['POST'])
+def control_group():
+    if not session.get('logged_in'): return jsonify({"success": False}), 403
+    group = request.json.get('group', '')
+    action = request.json.get('action')  # 'on' oder 'off'
+    pwd = get_config("shelly_password")
+    conn = get_db()
+    db_devices = conn.execute('SELECT ip FROM devices WHERE group_name = ?', (group,)).fetchall()
+    conn.close()
+    new_hardware_state = False if action == 'on' else True
+    results = []
+    for d in db_devices:
+        ip = d['ip']
+        for target_id in [0, 1]:
+            try:
+                url = f"http://{ip}/rpc/Shelly.SetState"
+                payload = {"id": target_id, "type": 0, "state": {"state": new_hardware_state}}
+                res = requests.post(url, json=payload, auth=HTTPDigestAuth('admin', pwd), timeout=4)
+                if res.status_code == 200 and "component not found" not in res.text:
+                    results.append(ip)
+                    break
+            except Exception as e:
+                logging.warning(f"Gruppensteuerung fehlgeschlagen für {ip}: {e}")
+    return jsonify({"success": True, "count": len(results)})
+
+@app.route('/rename_device', methods=['POST'])
+def rename_device():
+    if not session.get('logged_in'): return jsonify({"success": False}), 403
+    ip = request.json.get('ip')
+    name = request.json.get('name', '').strip()
+    if not name: return jsonify({"success": False, "error": "Name darf nicht leer sein"})
+    conn = get_db()
+    conn.execute('UPDATE devices SET name = ? WHERE ip = ?', (name, ip))
+    conn.commit()
+    conn.close()
+    logging.info(f"Gerät {ip} umbenannt zu '{name}'")
+    return jsonify({"success": True})
+
+@app.route('/update_all', methods=['POST'])
+def update_all():
+    if not session.get('logged_in'): return jsonify({"success": False}), 403
+    latest_v = get_latest_version()
+    conn = get_db()
+    db_devices = conn.execute('SELECT ip, name, group_name FROM devices').fetchall()
+    conn.close()
+    task_data = [(d['ip'], d['name'], latest_v, d['group_name'] or '') for d in db_devices]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        statuses = list(executor.map(get_shelly_status, task_data))
+    outdated = [d for d in statuses if d['status'] == 'Online' and not d['fw_ok']]
+    results = []
+    pwd = get_config("shelly_password")
+    for dev in outdated:
+        try:
+            res_info = requests.get(f"http://{dev['ip']}/rpc/Shelly.GetInfoExt", auth=HTTPDigestAuth('admin', pwd), timeout=3)
+            model = res_info.json().get("model", "")
+            ota_url = f"http://shelly.rojer.cloud/update/shelly-homekit-{model}.zip"
+            requests.get(f"http://{dev['ip']}/ota", params={"url": ota_url}, auth=HTTPDigestAuth('admin', pwd), timeout=5)
+            results.append(dev['ip'])
+        except Exception as e:
+            logging.warning(f"Update fehlgeschlagen für {dev['ip']}: {e}")
+    return jsonify({"success": True, "updated": results, "count": len(results)})
+
+@app.route('/status')
+def status():
+    if not session.get('logged_in'): return jsonify({"error": "unauthorized"}), 403
+    latest_v = get_latest_version()
+    conn = get_db()
+    db_devices = conn.execute('SELECT ip, name, group_name FROM devices ORDER BY position ASC').fetchall()
+    conn.close()
+    task_data = [(d['ip'], d['name'], latest_v, d['group_name'] or '') for d in db_devices]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        devices = list(executor.map(get_shelly_status, task_data))
+    return jsonify({"devices": devices, "latest_v": latest_v})
+
+@app.route('/remove_device', methods=['POST'])
+def remove_device():
+    if not session.get('logged_in'): return jsonify({"success": False}), 403
+    ip = request.json.get('ip')
+    conn = get_db()
+    conn.execute('DELETE FROM devices WHERE ip = ?', (ip,))
+    conn.commit()
+    conn.close()
+    logging.info(f"Gerät {ip} entfernt.")
+    return jsonify({"success": True})
 
 @app.route('/update_order', methods=['POST'])
 def update_order():

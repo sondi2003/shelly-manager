@@ -14,8 +14,14 @@
             <span class="navbar-brand fw-bold">SHELLY <span class="text-primary">MANAGER</span></span>
             <div class="d-flex align-items-center">
                 <span class="badge bg-dark border border-secondary me-3 p-2">
-                    Latest FW: {{ latest_v if latest_v else 'Pruefung...' }}
+                    Latest FW: <span id="latest-fw">{{ latest_v if latest_v else 'Prüfung...' }}</span>
                 </span>
+                <span class="badge bg-dark border border-secondary me-3 p-2 text-muted" id="refresh-countdown">
+                    Refresh in 30s
+                </span>
+                {% if devices | selectattr('fw_ok', 'equalto', false) | selectattr('status', 'equalto', 'Online') | list %}
+                <button class="btn btn-sm btn-warning me-2 fw-bold" onclick="updateAll()">⬆ ALLE UPDATEN</button>
+                {% endif %}
                 <button class="btn btn-sm btn-primary me-2" id="scanBtn" onclick="runScan()">NETZWERK SCAN</button>
                 <a href="/settings" class="btn btn-sm btn-outline-light me-2">SETUP</a>
                 <a href="/logout" class="btn btn-sm btn-danger">LOGOUT</a>
@@ -24,87 +30,101 @@
     </nav>
 
     <div class="container">
-        <div id="scanStatus" class="alert alert-info d-none mb-4">Scan laeuft... Bitte warten.</div>
-        
-        <div class="row g-4" id="device-grid">
-            {% for d in devices %}
-            <div class="col-md-6 col-lg-4 device-card" data-ip="{{ d.ip }}">
-                <div class="card h-100 shadow-sm {% if d.status != 'Online' %}card-offline{% endif %}">
-                    <div class="card-body p-4">
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <h5 class="card-title mb-0">{{ d.name }}</h5>
-                            <span class="small fw-bold">
-                                <span class="status-dot {% if d.status == 'Online' %}online{% else %}offline{% endif %}"></span>
-                                {{ d.status }}
-                            </span>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <a href="http://{{ d.ip }}" target="_blank" class="device-ip-link">IP: {{ d.ip }}</a>
-                        </div>
+        <div id="scanStatus" class="alert alert-info d-none mb-4">Scan läuft... Bitte warten.</div>
 
-                        {% if d.status == 'Online' %}
-                        <div class="info-box mb-3">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span>Firmware:</span>
-                                {% if not d.fw_ok %}
-                                <button class="btn btn-link p-0 text-warning fw-bold text-decoration-none" onclick="startUpdate('{{ d.ip }}')">
-                                    {{ d.version }} (Update!)
-                                </button>
-                                {% else %}
-                                <span class="text-success fw-bold">{{ d.version }}</span>
-                                {% endif %}
+        {% for group_name, group_devices in sorted_groups %}
+        <div class="group-section mb-5">
+            <div class="group-header d-flex align-items-center justify-content-between mb-3">
+                <h6 class="group-title mb-0">
+                    {{ group_name if group_name else 'Keine Gruppe' }}
+                </h6>
+                {% if group_name %}
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-success" onclick="controlGroup('{{ group_name }}', 'on')">Alle AN</button>
+                    <button class="btn btn-sm btn-outline-warning" onclick="controlGroup('{{ group_name }}', 'off')">Alle AUS</button>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="row g-4 device-grid" id="grid-{{ group_name | replace(' ', '_') }}">
+                {% for d in group_devices %}
+                <div class="col-md-6 col-lg-4 device-card" data-ip="{{ d.ip }}">
+                    <div class="card h-100 shadow-sm {% if d.status != 'Online' %}card-offline{% endif %}">
+                        <div class="card-body p-4">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <h5 class="card-title mb-0" title="Klicken zum Umbenennen" style="cursor:pointer"
+                                    onclick="startRename(this, '{{ d.ip }}', '{{ d.name }}')">{{ d.name }}</h5>
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="small fw-bold">
+                                        <span class="status-dot {% if d.status == 'Online' %}online{% else %}offline{% endif %}"></span>
+                                        <span class="status-text">{{ d.status }}</span>
+                                    </span>
+                                    <button class="btn-remove" title="Gerät entfernen" onclick="removeDevice('{{ d.ip }}', '{{ d.name }}')">✕</button>
+                                </div>
                             </div>
-                            <div class="d-flex justify-content-between">
-                                <span>Signal:</span>
-                                <span class="{% if d.rssi < -75 %}text-danger{% elif d.rssi < -60 %}text-warning{% else %}text-success{% endif %} fw-bold">
-                                    {{ d.rssi }} dBm
+
+                            <div class="d-flex align-items-center justify-content-between mb-3">
+                                <a href="http://{{ d.ip }}" target="_blank" class="device-ip-link">IP: {{ d.ip }}</a>
+                                <span class="group-badge" title="Gruppe ändern"
+                                      onclick="startSetGroup(this, '{{ d.ip }}', '{{ d.group_name }}')">
+                                    {{ d.group_name if d.group_name else '+ Gruppe' }}
                                 </span>
                             </div>
-                            <div class="d-flex justify-content-between">
-                                <span>Uptime:</span>
-                                <span class="uptime-display" data-seconds="{{ d.uptime }}">{{ d.uptime_str }}</span>
+
+                            {% if d.status == 'Online' %}
+                            <div class="info-box mb-3">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span>Firmware:</span>
+                                    <span>
+                                        <span class="fw-display {% if d.fw_ok %}text-success{% else %}text-warning{% endif %} fw-bold">{{ d.version }}</span>
+                                        <button class="btn btn-link p-0 text-warning fw-bold text-decoration-none fw-update-btn ms-1" onclick="startUpdate('{{ d.ip }}')" {% if d.fw_ok %}style="display:none"{% endif %}>(Update!)</button>
+                                    </span>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <span>Signal:</span>
+                                    <span class="rssi-display fw-bold {% if d.rssi < -75 %}text-danger{% elif d.rssi < -60 %}text-warning{% else %}text-success{% endif %}">
+                                        {{ d.rssi }} dBm
+                                    </span>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <span>Uptime:</span>
+                                    <span class="uptime-display" data-seconds="{{ d.uptime }}">{{ d.uptime_str }}</span>
+                                </div>
                             </div>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-{% if d.ison %}success{% else %}warning{% endif %} flex-grow-1 fw-bold"
+                                        onclick="sendCmd('{{ d.ip }}', 'state', '{% if d.ison %}off{% else %}on{% endif %}')">
+                                    {% if d.ison %}AN{% else %}AUS{% endif %}
+                                </button>
+                                <button class="btn btn-outline-light" onclick="confirmReboot('{{ d.ip }}', '{{ d.name }}')">REBOOT</button>
+                            </div>
+                            {% endif %}
                         </div>
-                        <div class="d-flex gap-2">
-                            <button class="btn btn-{% if d.ison %}success{% else %}warning{% endif %} flex-grow-1 fw-bold" 
-                                    onclick="sendCmd('{{ d.ip }}', 'state', '{% if d.ison %}off{% else %}on{% endif %}')">
-                                {% if d.ison %}AN{% else %}AUS{% endif %}
-                            </button>
-                            <button class="btn btn-outline-light" onclick="confirmReboot('{{ d.ip }}', '{{ d.name }}')">REBOOT</button>
-                        </div>
-                        {% endif %}
                     </div>
                 </div>
+                {% endfor %}
             </div>
-            {% endfor %}
         </div>
+        {% endfor %}
     </div>
 
     <script>
-    // Live Uptime Counter
     function formatTime(s) {
-        let y = Math.floor(s / (3600 * 24 * 365));
-        s %= (3600 * 24 * 365);
-        let mo = Math.floor(s / (3600 * 24 * 30));
-        s %= (3600 * 24 * 30);
-        let d = Math.floor(s / (3600 * 24));
-        s %= (3600 * 24);
-        let h = Math.floor(s / 3600);
-        s %= 3600;
-        let m = Math.floor(s / 60);
-        let sec = s % 60;
-
+        let y = Math.floor(s / (3600 * 24 * 365)); s %= (3600 * 24 * 365);
+        let mo = Math.floor(s / (3600 * 24 * 30)); s %= (3600 * 24 * 30);
+        let d = Math.floor(s / (3600 * 24)); s %= (3600 * 24);
+        let h = Math.floor(s / 3600); s %= 3600;
+        let m = Math.floor(s / 60), sec = s % 60;
         let res = [];
         if (y > 0) res.push(y + "J");
         if (mo > 0) res.push(mo + "M");
         if (d > 0) res.push(d + "T");
         if (h > 0) res.push(h + "Std");
-        
         let ts = String(m).padStart(2, '0') + ":" + String(sec).padStart(2, '0');
         return res.length > 0 ? res.join(", ") + ", " + ts : ts;
     }
 
+    // Uptime-Counter läuft jede Sekunde weiter
     setInterval(() => {
         document.querySelectorAll('.uptime-display').forEach(el => {
             let s = parseInt(el.getAttribute('data-seconds')) + 1;
@@ -113,21 +133,68 @@
         });
     }, 1000);
 
-    const grid = document.getElementById('device-grid');
-    new Sortable(grid, {
-        animation: 150,
-        ghostClass: 'sortable-ghost',
-        onEnd: function() {
-            const order = [];
-            document.querySelectorAll('.device-card').forEach(el => {
-                order.push(el.getAttribute('data-ip'));
-            });
-            fetch('/update_order', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({order: order})
-            });
+    // Auto-Refresh: Countdown + Status per AJAX alle 30 Sekunden
+    const REFRESH_INTERVAL = 30;
+    let countdown = REFRESH_INTERVAL;
+
+    function updateCountdown() {
+        countdown--;
+        document.getElementById('refresh-countdown').innerText = 'Refresh in ' + countdown + 's';
+        if (countdown <= 0) {
+            countdown = REFRESH_INTERVAL;
+            fetchStatus();
         }
+    }
+    setInterval(updateCountdown, 1000);
+
+    function fetchStatus() {
+        fetch('/status').then(r => r.json()).then(data => {
+            if (data.error) return;
+            document.getElementById('latest-fw').innerText = data.latest_v || 'Prüfung...';
+            data.devices.forEach(dev => {
+                const card = document.querySelector(`.device-card[data-ip="${dev.ip}"]`);
+                if (!card) return;
+                const inner = card.querySelector('.card');
+                inner.classList.toggle('card-offline', dev.status !== 'Online');
+
+                const dot = card.querySelector('.status-dot');
+                dot.className = 'status-dot ' + (dev.status === 'Online' ? 'online' : 'offline');
+                card.querySelector('.status-text').innerText = dev.status;
+
+                const infoBox = card.querySelector('.info-box');
+                if (dev.status === 'Online' && infoBox) {
+                    card.querySelector('.fw-display').innerText = dev.version;
+                    const fwBtn = card.querySelector('.fw-update-btn');
+                    if (fwBtn) fwBtn.style.display = dev.fw_ok ? 'none' : 'inline';
+                    const rssiEl = card.querySelector('.rssi-display');
+                    if (rssiEl) {
+                        rssiEl.innerText = dev.rssi + ' dBm';
+                        rssiEl.className = 'rssi-display fw-bold ' + (dev.rssi < -75 ? 'text-danger' : dev.rssi < -60 ? 'text-warning' : 'text-success');
+                    }
+                    const uptimeEl = card.querySelector('.uptime-display');
+                    if (uptimeEl) uptimeEl.setAttribute('data-seconds', dev.uptime);
+                }
+            });
+        }).catch(() => {});
+    }
+
+    // Sortable auf jedes Gruppen-Grid anwenden
+    document.querySelectorAll('.device-grid').forEach(grid => {
+        new Sortable(grid, {
+            animation: 150,
+            ghostClass: 'sortable-ghost',
+            onEnd: function() {
+                const order = [];
+                document.querySelectorAll('.device-card').forEach(el => {
+                    order.push(el.getAttribute('data-ip'));
+                });
+                fetch('/update_order', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({order: order})
+                });
+            }
+        });
     });
 
     function runScan() {
@@ -146,6 +213,87 @@
             if (data.success) { alert('Update gestartet!'); location.reload(); }
             else { alert('Fehler: ' + data.error); }
         });
+    }
+
+    function startRename(el, ip, currentName) {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = currentName;
+        input.className = 'form-control form-control-sm';
+        input.style.maxWidth = '160px';
+        el.replaceWith(input);
+        input.focus();
+        input.select();
+
+        function save() {
+            const name = input.value.trim();
+            if (!name || name === currentName) { location.reload(); return; }
+            fetch('/rename_device', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ip, name})
+            }).then(() => location.reload());
+        }
+        input.addEventListener('blur', save);
+        input.addEventListener('keydown', e => {
+            if (e.key === 'Enter') save();
+            if (e.key === 'Escape') location.reload();
+        });
+    }
+
+    function startSetGroup(el, ip, currentGroup) {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = currentGroup;
+        input.placeholder = 'z.B. Wohnzimmer';
+        input.className = 'form-control form-control-sm';
+        input.style.maxWidth = '140px';
+        el.replaceWith(input);
+        input.focus();
+        input.select();
+
+        function save() {
+            const group = input.value.trim();
+            fetch('/set_group', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ip, group})
+            }).then(() => location.reload());
+        }
+        input.addEventListener('blur', save);
+        input.addEventListener('keydown', e => {
+            if (e.key === 'Enter') save();
+            if (e.key === 'Escape') location.reload();
+        });
+    }
+
+    function controlGroup(group, action) {
+        fetch('/control_group', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({group, action})
+        }).then(r => r.json()).then(data => {
+            if (data.success) setTimeout(() => location.reload(), 800);
+        });
+    }
+
+    function updateAll() {
+        if (!confirm('Alle veralteten Geräte jetzt updaten?')) return;
+        fetch('/update_all', {method: 'POST'})
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) alert(data.count + ' Gerät(e) wurden zum Update gestartet.');
+                else alert('Fehler beim Massenupdate.');
+            });
+    }
+
+    function removeDevice(ip, name) {
+        if (!confirm('Gerät "' + name + '" aus der Liste entfernen?')) return;
+        fetch('/remove_device', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ip: ip})
+        }).then(() => location.reload());
     }
 
     function confirmReboot(ip, name) {

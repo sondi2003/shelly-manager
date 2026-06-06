@@ -1,6 +1,9 @@
 # Persönliche Konfiguration — nie committen
 .env
 
+# Wiki-Backup — lebt separat auf GitHub, nicht im Repo
+wiki/
+
 # Datenbank & persistente Daten — bleibt lokal
 data/
 *.db

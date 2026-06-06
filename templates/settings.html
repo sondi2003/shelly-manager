@@ -9,28 +9,35 @@
     <script>(function(){ document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'dark'); })();</script>
 </head>
 <body>
-    <div class="container d-flex align-items-center justify-content-center" style="min-height: 80vh;">
-        <div class="card p-4 shadow" style="width: 100%; max-width: 480px;">
+    <div class="container py-5" style="max-width: 520px;">
+        <div class="card p-4 shadow">
             <h3 class="mb-4 text-center fw-bold">Konfiguration</h3>
 
             {% if message %}
-            <div class="alert alert-success bg-success text-white border-0 py-2 small mb-4">{{ message }}</div>
+            <div class="alert alert-success border-0 py-2 small mb-4"
+                 style="background: rgba(16,185,129,0.15); color: var(--success);">
+                ✓ {{ message }}
+            </div>
             {% endif %}
 
             <form action="/settings" method="post">
 
-                <!-- Scan-Modus Umschalter -->
+                <!-- Scan-Modus -->
                 <div class="mb-4">
                     <label class="form-label">Erkennungs-Methode</label>
                     <div class="scan-mode-toggle">
                         <label class="scan-option {% if scan_mode == 'ip' %}active{% endif %}">
-                            <input type="radio" name="scan_mode" value="ip" {% if scan_mode == 'ip' %}checked{% endif %} onchange="onScanModeChange(this)">
+                            <input type="radio" name="scan_mode" value="ip"
+                                   {% if scan_mode == 'ip' %}checked{% endif %}
+                                   onchange="onScanModeChange(this)">
                             <span class="scan-icon">🔍</span>
                             <span class="scan-label">IP-Scan</span>
                             <span class="scan-desc">Manueller IP-Bereich</span>
                         </label>
                         <label class="scan-option {% if scan_mode == 'mdns' %}active{% endif %}">
-                            <input type="radio" name="scan_mode" value="mdns" {% if scan_mode == 'mdns' %}checked{% endif %} onchange="onScanModeChange(this)">
+                            <input type="radio" name="scan_mode" value="mdns"
+                                   {% if scan_mode == 'mdns' %}checked{% endif %}
+                                   onchange="onScanModeChange(this)">
                             <span class="scan-icon">📡</span>
                             <span class="scan-label">mDNS</span>
                             <span class="scan-desc">Automatisch im Netz</span>
@@ -38,30 +45,28 @@
                     </div>
                 </div>
 
-                <!-- IP-Bereich — nur bei IP-Scan sichtbar -->
                 <div class="mb-4" id="ip-range-block" {% if scan_mode == 'mdns' %}style="display:none"{% endif %}>
                     <label class="form-label">Scan-Bereich / Subnetz</label>
                     <input type="text" name="ip_range" class="form-control" value="{{ ip_range }}"
-                           placeholder="z.B. 192.168.1.1-192.168.1.50 oder 192.168.1.0/24">
+                           placeholder="z.B. 192.168.1.1-192.168.1.50">
                     <div class="form-text">Bereich mit - oder CIDR-Notation eingeben.</div>
                 </div>
 
-                <!-- mDNS Hinweis — nur bei mDNS sichtbar -->
                 <div class="mb-4" id="mdns-info-block" {% if scan_mode == 'ip' %}style="display:none"{% endif %}>
                     <div class="alert-mdns">
                         <strong>📡 mDNS aktiv</strong><br>
-                        Geräte werden automatisch im lokalen Netzwerk gefunden.<br>
-                        <span class="text-muted small">Funktioniert nur wenn der Docker-Container im Host-Netzwerk läuft (<code>network_mode: host</code>).</span>
+                        Geräte werden automatisch im lokalen Netz gefunden.<br>
+                        <span class="text-muted small">Benötigt <code>network_mode: host</code> in docker-compose.yml.</span>
                     </div>
                 </div>
 
                 <div class="mb-4">
                     <label class="form-label">Zentrales Shelly Passwort</label>
-                    <input type="password" name="shelly_password" class="form-control" value="{{ shelly_pwd }}"
-                           placeholder="Passwort eingeben">
+                    <input type="password" name="shelly_password" class="form-control"
+                           value="{{ shelly_pwd }}" placeholder="Passwort der Shelly-Geräte">
                 </div>
 
-                <hr class="my-4" style="border-color: var(--border);">
+                <hr style="border-color: var(--border); margin: 1.5rem 0;">
 
                 <div class="mb-4">
                     <label class="form-label">Admin Passwort ändern</label>
@@ -70,8 +75,53 @@
                 </div>
 
                 <button type="submit" class="btn btn-primary w-100">EINSTELLUNGEN SPEICHERN</button>
-                <a href="/" class="btn-back">← Zurück zum Dashboard</a>
             </form>
+
+            <!-- API-Token Verwaltung -->
+            <hr style="border-color: var(--border); margin: 2rem 0;">
+
+            <h6 class="text-muted text-uppercase small fw-bold mb-3" style="letter-spacing: 0.1em;">
+                API-Tokens
+            </h6>
+            <p class="small" style="color: var(--text-muted);">
+                Tokens erlauben externen Tools (z.B. Home Assistant, Skripte) den Zugriff ohne Browser-Login.
+                Sende den Token im Header: <code style="background:var(--bg-code); padding: 1px 5px; border-radius:4px;">X-API-Token: sm_...</code>
+            </p>
+
+            <!-- Bestehende Tokens -->
+            <div id="token-list" class="mb-3">
+                {% for t in tokens %}
+                <div class="token-row d-flex align-items-center justify-content-between" id="token-{{ t.id }}">
+                    <div>
+                        <span class="fw-bold small">{{ t.name }}</span>
+                        <span class="token-preview ms-2">{{ t.token_preview }}</span>
+                        <span class="text-muted small ms-2">{{ t.created_at }}</span>
+                    </div>
+                    <button class="btn-remove" onclick="deleteToken({{ t.id }}, '{{ t.name }}')">✕</button>
+                </div>
+                {% else %}
+                <p class="text-muted small" id="no-tokens-msg">Noch keine Tokens erstellt.</p>
+                {% endfor %}
+            </div>
+
+            <!-- Neuen Token erstellen -->
+            <div id="new-token-display" class="token-reveal d-none">
+                <p class="small fw-bold mb-1">✓ Token erstellt — jetzt kopieren, er wird nur einmal angezeigt:</p>
+                <div class="d-flex gap-2 align-items-center">
+                    <code id="new-token-value" class="token-value flex-grow-1"></code>
+                    <button class="btn-outline-themed small" onclick="copyToken()">Kopieren</button>
+                </div>
+            </div>
+
+            <div class="d-flex gap-2 mt-3">
+                <input type="text" id="new-token-name" class="form-control form-control-sm"
+                       placeholder="Name z.B. Home Assistant">
+                <button class="btn btn-sm btn-primary" onclick="createToken()" style="white-space:nowrap">
+                    + Token erstellen
+                </button>
+            </div>
+
+            <a href="/" class="btn-back">← Zurück zum Dashboard</a>
         </div>
     </div>
 
@@ -80,9 +130,54 @@
         const isIP = el.value === 'ip';
         document.getElementById('ip-range-block').style.display  = isIP ? '' : 'none';
         document.getElementById('mdns-info-block').style.display = isIP ? 'none' : '';
-        // Aktiv-Klasse für Styling
-        document.querySelectorAll('.scan-option').forEach(opt => opt.classList.remove('active'));
+        document.querySelectorAll('.scan-option').forEach(o => o.classList.remove('active'));
         el.closest('.scan-option').classList.add('active');
+    }
+
+    function createToken() {
+        const name = document.getElementById('new-token-name').value.trim();
+        if (!name) { alert('Bitte einen Namen eingeben.'); return; }
+        fetch('/tokens/create', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name})
+        }).then(r => r.json()).then(data => {
+            if (!data.success) { alert('Fehler: ' + data.error); return; }
+            // Token anzeigen
+            document.getElementById('new-token-value').innerText = data.token;
+            document.getElementById('new-token-display').classList.remove('d-none');
+            document.getElementById('new-token-name').value = '';
+            // In Liste einfügen
+            const noMsg = document.getElementById('no-tokens-msg');
+            if (noMsg) noMsg.remove();
+            const row = document.createElement('div');
+            row.className = 'token-row d-flex align-items-center justify-content-between';
+            row.id = 'token-new';
+            row.innerHTML = `<div>
+                <span class="fw-bold small">${data.name}</span>
+                <span class="token-preview ms-2">${data.token.substring(0,10)}...</span>
+                <span class="text-muted small ms-2">${data.created_at}</span>
+            </div>
+            <button class="btn-remove" onclick="location.reload()">✕</button>`;
+            document.getElementById('token-list').prepend(row);
+        });
+    }
+
+    function copyToken() {
+        const val = document.getElementById('new-token-value').innerText;
+        navigator.clipboard.writeText(val).then(() => alert('Token in Zwischenablage kopiert!'));
+    }
+
+    function deleteToken(id, name) {
+        if (!confirm(`Token "${name}" wirklich löschen?`)) return;
+        fetch('/tokens/delete', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id})
+        }).then(() => {
+            const el = document.getElementById('token-' + id);
+            if (el) el.remove();
+        });
     }
     </script>
 </body>

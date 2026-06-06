@@ -1,67 +1,150 @@
-# Shelly Mongoose Manager 🚀
+# Shelly Manager 🐚
 
-Ein leichtgewichtiger, Docker-basierter Manager für Shelly-Geräte, die mit der **Mongoose OS HomeKit Firmware** betrieben werden. Dieses Tool ermöglicht die zentrale Steuerung, Überwachung und das einfache Durchführen von Firmware-Updates über ein modernes Web-Dashboard.
+Ein leichtgewichtiger, Docker-basierter Manager für Shelly-Geräte mit der **[Mongoose OS HomeKit Firmware](https://github.com/mongoose-os-apps/shelly-homekit)**. Zentrales Dashboard zum Steuern, Überwachen und Aktualisieren aller Geräte im Netzwerk.
+
+---
 
 ## ✨ Features
 
-- **Zentrales Dashboard:** Alle Shellys auf einen Blick (Status, IP, Signalstärke).
-- **Mongoose OS optimiert:** Nutzt die spezifischen RPC-Endpunkte für Status und Schaltung.
-- **Intelligenter Firmware-Check:** Prüft automatisch über die GitHub-API, ob eine neue Version von `shelly-homekit` verfügbar ist.
-- **One-Click Update:** Führt Firmware-Updates direkt aus dem Dashboard via OTA-Proxy durch.
-- **Echtzeit-Uptime:** Anzeige der Laufzeit in Jahren, Monaten, Tagen und Sekunden – tickt live im Browser.
-- **Drag & Drop Sortierung:** Ordne deine Geräteoberfläche so an, wie du es möchtest (Reihenfolge wird gespeichert).
-- **Netzwerk-Scanner:** Scannt IP-Bereiche oder CIDR-Subnetze nach neuen Geräten.
-- **Security:** Passwortgeschützter Login und Unterstützung für Shelly-Authentifizierung (Digest Auth).
+- **Dashboard** — alle Shellys auf einen Blick: Status, Signal, Uptime, Firmware
+- **Gruppen** — Geräte in Räume einteilen, ganze Gruppen ein-/ausschalten
+- **Live-Uptime** — tickt sekündlich im Browser ohne Seitenreload
+- **Firmware-Check** — prüft automatisch via GitHub ob Updates verfügbar sind
+- **OTA-Update** — Firmware-Update per Klick, auch für alle Geräte gleichzeitig
+- **Energieverbrauch** — Watt, Volt, Ampere für Geräte mit Strommessung (Plug S, 1PM etc.)
+- **Netzwerk-Scan** — IP-Bereich oder mDNS (automatisch)
+- **API-Tokens** — externer Zugriff für Home Assistant, Skripte etc.
+- **Dark / Light Mode** — umschaltbar, wird gespeichert
+- **Drag & Drop** — Reihenfolge der Karten frei sortierbar
+- **Docker** — komplett containerisiert, Daten bleiben bei Updates erhalten
 
-## 🛠 Installation (Docker)
+---
 
-Der Shelly Manager ist für den Betrieb in Docker optimiert.
+## 🚀 Installation
 
-1. **Repository klonen:**
-   ```bash
-   git clone [https://github.com/DEIN_USERNAME/shelly-manager.git](https://github.com/DEIN_USERNAME/shelly-manager.git)
-   cd shelly-manager
+### Voraussetzungen
+- Docker & Docker Compose
 
-   Docker Container bauen & starten:
-   docker build -t shelly-manager .
-docker run -d -p 5000:5000 -v $(pwd)/data:/app/data --name shelly-manager-app shelly-manager
+### 1. Repository klonen
 
-Dashboard aufrufen:
-Öffne http://localhost:5000 in deinem Browser.
+```bash
+git clone https://github.com/DEIN_USERNAME/shelly-manager.git
+cd shelly-manager
+```
 
-Standard-User: admin
+### 2. Konfiguration anlegen
 
-Standard-Passwort: admin (Sofort in den Einstellungen ändern!)
+```bash
+cp .env.example .env
+```
 
-⚙️ Konfiguration
-Gehe nach dem ersten Login auf SETUP, um folgende Werte zu konfigurieren:
+Öffne `.env` und setze mindestens:
 
-Admin-Passwort: Ändere das Passwort für das Dashboard.
+```env
+HOST_PORT=8095
+APP_DB_PATH=./data
+SECRET_KEY=hier-einen-langen-zufaelligen-string    # openssl rand -hex 32
+```
 
-Shelly-Passwort: Das Passwort, welches du in der Mongoose-Firmware für deine Geräte gesetzt hast.
+### 3. Container starten
 
-IP-Range: Gib dein Subnetz an (z. B. 192.168.1.0/24) oder einen Bereich (192.168.1.10-20).
+```bash
+docker-compose up --build -d
+```
 
+### 4. Setup-Wizard
 
-<img width="1355" height="948" alt="image" src="https://github.com/user-attachments/assets/549b8705-9ed2-40dd-b276-b6b806d52012" />
+Beim ersten Start öffne `http://dein-server:8095` im Browser.  
+Du wirst automatisch zum **Ersteinrichtungs-Wizard** weitergeleitet wo du:
+- das Admin-Passwort setzt
+- den IP-Scan Bereich konfigurierst
+- das Shelly-Passwort einträgst (falls gesetzt)
 
+---
 
+## ⚙️ Konfiguration
 
-🚀 Roadmap / Mitwirken
-Dieses Projekt ist Open Source und ich freue mich über jede Unterstützung! Geplante Features sind:
+### Umgebungsvariablen (`.env`)
 
-Möchtest du mithelfen?
+| Variable | Beschreibung | Pflicht |
+|---|---|---|
+| `HOST_PORT` | Port des Dashboards | ✅ |
+| `APP_DB_PATH` | Pfad für die SQLite-Datenbank | ✅ |
+| `SECRET_KEY` | Geheimer Schlüssel für Sessions | ✅ |
+| `ADMIN_PASSWORD` | Admin-Passwort direkt setzen (überspringt Wizard) | — |
+| `FLASK_ENV` | `production` (Standard) | — |
 
-Forke das Repository.
+### Updates durchführen
 
-Erstelle einen Feature-Branch (git checkout -b feature/neues-feature).
+Deine Daten (Gerätliste, Gruppen, Tokens) liegen im `data/`-Ordner als SQLite-Datenbank und bleiben bei Updates erhalten.
 
-Commit deine Änderungen (git commit -m 'Add some feature').
+```bash
+git pull
+docker-compose up --build -d
+```
 
-Push den Branch (git push origin feature/neues-feature).
+---
 
-Öffne einen Pull Request.
+## 🔑 API-Token Nutzung
 
-📄 Lizenz
-Verteilt unter der MIT-Lizenz. Siehe LICENSE für weitere Informationen.
+Tokens ermöglichen externen Tools den Zugriff ohne Browser-Login.
 
+**Token erstellen:** Einstellungen → API-Tokens → Name eingeben → Token erstellen
+
+**Token verwenden:**
+
+```bash
+# Gerät einschalten
+curl -X POST http://dein-server:8095/control \
+  -H "Content-Type: application/json" \
+  -H "X-API-Token: sm_dein-token" \
+  -d '{"ip": "192.168.1.50", "action": "state", "value": "on"}'
+
+# Gruppe ausschalten
+curl -X POST http://dein-server:8095/control_group \
+  -H "Content-Type: application/json" \
+  -H "X-API-Token: sm_dein-token" \
+  -d '{"group": "Wohnzimmer", "action": "off"}'
+
+# Status aller Geräte
+curl http://dein-server:8095/status \
+  -H "X-API-Token: sm_dein-token"
+```
+
+### Home Assistant Beispiel
+
+```yaml
+rest_command:
+  shelly_wohnzimmer_an:
+    url: "http://dein-server:8095/control_group"
+    method: POST
+    headers:
+      X-API-Token: "sm_dein-token"
+      Content-Type: "application/json"
+    payload: '{"group": "Wohnzimmer", "action": "on"}'
+```
+
+---
+
+## 🌐 mDNS (optional)
+
+Wenn der Container im lokalen Netz läuft (nicht in der Cloud), kann mDNS Geräte automatisch ohne IP-Konfiguration finden.  
+Dazu in `docker-compose.yml` `network_mode: host` aktivieren und mDNS in den Einstellungen wählen.
+
+---
+
+## 🤝 Mitwirken
+
+Pull Requests sind willkommen!
+
+1. Fork erstellen
+2. Feature-Branch anlegen (`git checkout -b feature/mein-feature`)
+3. Änderungen committen (`git commit -m 'feat: mein feature'`)
+4. Branch pushen (`git push origin feature/mein-feature`)
+5. Pull Request öffnen
+
+---
+
+## 📄 Lizenz
+
+MIT License — siehe [LICENSE](LICENSE)

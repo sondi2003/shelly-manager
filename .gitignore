@@ -1,2 +1,18 @@
-# Alle SQLite / DB Dateien ignorieren
+# Persönliche Konfiguration — nie committen
+.env
+
+# Datenbank & persistente Daten — bleibt lokal
+data/
 *.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# macOS
+.DS_Store
+
+# Docker Logs
+*.log

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Ersteinrichtung - Shelly Manager</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
+    <script>(function(){ document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'dark'); })();</script>
+</head>
+<body>
+    <div class="container d-flex align-items-center justify-content-center" style="min-height: 100vh; padding: 2rem 0;">
+        <div class="card p-4 shadow" style="width: 100%; max-width: 500px;">
+
+            <div class="text-center mb-4">
+                <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🐚</div>
+                <h3 class="fw-bold mb-1">Willkommen beim Shelly Manager</h3>
+                <p class="text-muted small mb-0">Bitte richte deinen Account und die Grundeinstellungen ein.</p>
+            </div>
+
+            {% if error %}
+            <div class="alert alert-danger border-0 py-2 small mb-4" style="background: rgba(239,68,68,0.15); color: var(--danger);">
+                ⚠ {{ error }}
+            </div>
+            {% endif %}
+
+            <form action="/setup" method="post">
+
+                <h6 class="text-muted text-uppercase small fw-bold mb-3" style="letter-spacing: 0.1em;">Admin-Account</h6>
+
+                <div class="mb-3">
+                    <label class="form-label">Benutzername</label>
+                    <input type="text" class="form-control" value="admin" disabled>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Passwort <span class="text-danger">*</span></label>
+                    <input type="password" name="password" class="form-control" placeholder="Mindestens 6 Zeichen" required autofocus>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label">Passwort bestätigen <span class="text-danger">*</span></label>
+                    <input type="password" name="password2" class="form-control" placeholder="Passwort wiederholen" required>
+                </div>
+
+                <hr style="border-color: var(--border); margin: 1.5rem 0;">
+                <h6 class="text-muted text-uppercase small fw-bold mb-3" style="letter-spacing: 0.1em;">Netzwerk</h6>
+
+                <div class="mb-3">
+                    <label class="form-label">IP-Scan Bereich</label>
+                    <input type="text" name="ip_range" class="form-control"
+                           value="{{ default_ip_range }}"
+                           placeholder="z.B. 192.168.1.1-192.168.1.254">
+                    <div class="form-text">Kann später in den Einstellungen geändert werden.</div>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label">Shelly Passwort <span class="text-muted small fw-normal">(optional)</span></label>
+                    <input type="password" name="shelly_password" class="form-control"
+                           placeholder="Nur wenn Shellys ein Passwort haben">
+                    <div class="form-text">Das Passwort das auf deinen Shelly-Geräten gesetzt ist.</div>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100">EINRICHTUNG ABSCHLIESSEN</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

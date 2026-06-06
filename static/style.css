@@ -397,6 +397,43 @@ html[data-theme="light"] .energy-watts.energy-active {
 }
 
 /* ============================================================
+   API TOKEN
+   ============================================================ */
+.token-row {
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-infobox);
+    margin-bottom: 6px;
+}
+
+.token-preview {
+    font-family: monospace;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.token-reveal {
+    background: rgba(16, 185, 129, 0.08);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 10px;
+}
+
+.token-value {
+    font-family: monospace;
+    font-size: 0.78rem;
+    color: var(--success);
+    word-break: break-all;
+    background: var(--bg-infobox);
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    display: block;
+}
+
+/* ============================================================
    SORTABLE GHOST
    ============================================================ */
 .sortable-ghost {

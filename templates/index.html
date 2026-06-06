@@ -64,7 +64,12 @@
                             </div>
 
                             <div class="d-flex align-items-center justify-content-between mb-3">
-                                <a href="http://{{ d.ip }}" target="_blank" class="device-ip-link">IP: {{ d.ip }}</a>
+                                <div class="d-flex align-items-center gap-2">
+                                    <a href="http://{{ d.ip }}" target="_blank" class="device-ip-link">IP: {{ d.ip }}</a>
+                                    {% if d.model %}
+                                    <span class="model-badge">{{ d.model }}</span>
+                                    {% endif %}
+                                </div>
                                 <span class="group-badge" title="Gruppe ändern"
                                       onclick="startSetGroup(this, '{{ d.ip }}', '{{ d.group_name }}')">
                                     {{ d.group_name if d.group_name else '+ Gruppe' }}
@@ -91,6 +96,27 @@
                                     <span class="uptime-display" data-seconds="{{ d.uptime }}">{{ d.uptime_str }}</span>
                                 </div>
                             </div>
+
+                            {% if d.has_meter %}
+                            <div class="energy-box mt-2">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="energy-label">⚡ Leistung</span>
+                                    <span class="energy-watts {% if d.power_w and d.power_w > 0 %}energy-active{% endif %}">
+                                        {{ d.power_w if d.power_w is not none else '–' }} W
+                                    </span>
+                                </div>
+                                {% if d.voltage or d.current %}
+                                <div class="d-flex justify-content-between energy-meta">
+                                    {% if d.voltage %}
+                                    <span>{{ d.voltage }} V</span>
+                                    {% endif %}
+                                    {% if d.current %}
+                                    <span>{{ d.current }} A</span>
+                                    {% endif %}
+                                </div>
+                                {% endif %}
+                            </div>
+                            {% endif %}
                             <div class="d-flex gap-2">
                                 <button class="btn btn-{% if d.ison %}success{% else %}warning{% endif %} flex-grow-1 fw-bold"
                                         onclick="sendCmd('{{ d.ip }}', 'state', '{% if d.ison %}off{% else %}on{% endif %}')">

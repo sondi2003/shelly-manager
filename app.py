@@ -122,7 +122,7 @@ def get_latest_version():
 def get_shelly_status(args):
     ip, db_name, latest_v, group_name = args
     pwd = get_config("shelly_password")
-    device_data = {"ip": ip, "name": db_name, "group_name": group_name, "status": "Offline", "version": "-", "ison": False, "uptime": 0, "uptime_str": "-", "fw_ok": True}
+    device_data = {"ip": ip, "name": db_name, "group_name": group_name, "status": "Offline", "version": "-", "ison": False, "uptime": 0, "uptime_str": "-", "fw_ok": True, "has_meter": False, "power_w": None, "voltage": None, "current": None, "model": ""}
     try:
         res = requests.get(f"http://{ip}/rpc/Shelly.GetInfoExt", auth=HTTPDigestAuth('admin', pwd), timeout=2.0)
         if res.status_code == 200:
@@ -138,9 +138,22 @@ def get_shelly_status(args):
                 "fw_ok": (ver == latest_v if latest_v else True)
             })
             for comp in d.get("components", []):
-                if comp.get("type") == 0:
-                    device_data["ison"] = not comp.get("state", False)
-                    break
+                state = comp.get("state", {})
+                # Relay-Status
+                if comp.get("type") == 0 and not isinstance(state, dict):
+                    device_data["ison"] = not state
+                # Stromverbrauch: jede Komponente mit Leistungsdaten
+                if isinstance(state, dict):
+                    if comp.get("type") == 0:
+                        device_data["ison"] = not state.get("state", False)
+                    power = state.get("apower") if state.get("apower") is not None else state.get("power")
+                    if power is not None:
+                        device_data["power_w"]  = round(float(power), 1)
+                        device_data["voltage"]  = round(float(state["voltage"]), 1) if state.get("voltage") else None
+                        device_data["current"]  = round(float(state["current"]), 2) if state.get("current") else None
+                        device_data["has_meter"] = True
+            device_data.setdefault("has_meter", False)
+            device_data.setdefault("model", d.get("model", ""))
     except Exception as e:
         logging.warning(f"Fehler beim Abrufen von {ip}: {e}")
     return device_data

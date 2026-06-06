@@ -221,6 +221,49 @@ body {
 }
 .device-ip-link:hover { color: var(--accent); }
 
+/* Modell-Badge */
+.model-badge {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: rgba(51, 65, 85, 0.5);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 1px 6px;
+    letter-spacing: 0.03em;
+}
+
+/* Energie-Box */
+.energy-box {
+    background: rgba(234, 179, 8, 0.06);
+    border: 1px solid rgba(234, 179, 8, 0.25);
+    border-radius: 8px;
+    padding: 10px 12px;
+}
+
+.energy-label {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.energy-watts {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    transition: color 0.4s;
+}
+
+.energy-watts.energy-active {
+    color: #eab308;
+}
+
+.energy-meta {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
 .card-offline {
     opacity: 0.5;
     filter: grayscale(40%);

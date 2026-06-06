@@ -1,14 +1,55 @@
+/* ============================================================
+   DESIGN TOKENS — Dark Mode (Standard)
+   ============================================================ */
 :root {
-    --bg-main: #0f172a;
-    --bg-card: #1e293b;
-    --text-main: #f8fafc;
-    --text-muted: #94a3b8;
-    --accent: #3b82f6;
+    --bg-main:      #0f172a;
+    --bg-card:      #1e293b;
+    --bg-input:     #334155;
+    --bg-infobox:   rgba(15, 23, 42, 0.55);
+    --bg-badge:     rgba(51, 65, 85, 0.6);
+    --bg-code:      rgba(0, 0, 0, 0.30);
+    --text-main:    #f8fafc;
+    --text-muted:   #94a3b8;
+    --accent:       #3b82f6;
     --accent-hover: #2563eb;
-    --success: #10b981;
-    --danger: #ef4444;
-    --border: #334155;
-    --input-bg: #334155; /* Dunklerer Hintergrund für Inputs passend zum Design */
+    --success:      #10b981;
+    --danger:       #ef4444;
+    --border:       #334155;
+    --shadow-card:  0 2px 8px rgba(0, 0, 0, 0.4);
+    --transition:   background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+}
+
+/* ============================================================
+   DESIGN TOKENS — Light Mode
+   ============================================================ */
+html[data-theme="light"] {
+    --bg-main:      #f1f5f9;
+    --bg-card:      #ffffff;
+    --bg-input:     #f8fafc;
+    --bg-infobox:   rgba(226, 232, 240, 0.55);
+    --bg-badge:     rgba(203, 213, 225, 0.5);
+    --bg-code:      rgba(0, 0, 0, 0.07);
+    --text-main:    #0f172a;
+    --text-muted:   #64748b;
+    --accent:       #2563eb;
+    --accent-hover: #1d4ed8;
+    --success:      #059669;
+    --danger:       #dc2626;
+    --border:       #e2e8f0;
+    --shadow-card:  0 1px 4px rgba(0, 0, 0, 0.09);
+}
+
+/* ============================================================
+   BASIS
+   ============================================================ */
+*, *::before, *::after {
+    transition: var(--transition);
+}
+
+/* Transitions nur für Farben, nicht für alle Properties (sonst
+   werden Animationen wie Pulse oder Hover-Effekte gestört) */
+.status-dot, .btn, a {
+    transition: background-color 0.2s, color 0.2s, border-color 0.2s, opacity 0.2s;
 }
 
 body {
@@ -18,19 +59,65 @@ body {
     padding-top: 90px;
 }
 
+/* ============================================================
+   NAVBAR — bleibt immer dunkel (Branding)
+   ============================================================ */
 .navbar {
-    background-color: var(--bg-card);
-    border-bottom: 1px solid var(--border);
+    background-color: #1e293b !important;
+    border-bottom: 1px solid #334155;
 }
 
+.navbar-brand, .navbar .text-muted {
+    color: #f8fafc !important;
+}
+
+/* Theme-Toggle Button */
+.btn-theme {
+    background: none;
+    border: 1px solid rgba(255,255,255,0.2);
+    color: #f8fafc;
+    border-radius: 8px;
+    padding: 4px 10px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+    line-height: 1.4;
+}
+.btn-theme:hover {
+    background: rgba(255,255,255,0.1);
+    border-color: rgba(255,255,255,0.4);
+}
+
+/* Navbar Badges */
+.navbar .nav-badge {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: #cbd5e1;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* ============================================================
+   KARTEN
+   ============================================================ */
 .card {
     background-color: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: 16px;
-    color: var(--text-main); /* Sicherstellen, dass Text in Karten hell ist */
+    color: var(--text-main);
+    box-shadow: var(--shadow-card);
 }
 
-/* FORMULAR OPTIMIERUNG */
+.card-title {
+    color: var(--text-main);
+}
+
+/* ============================================================
+   FORMULARE
+   ============================================================ */
 .form-label {
     color: var(--text-main) !important;
     font-weight: 600;
@@ -39,17 +126,16 @@ body {
 }
 
 .form-control {
-    background-color: var(--input-bg) !important;
-    border: 1px solid var(--border);
-    color: var(--text-main) !important; /* Helle Schrift für bessere Lesbarkeit auf dunklem Grund */
+    background-color: var(--bg-input) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--text-main) !important;
     font-weight: 400;
     padding: 12px;
-    transition: border-color 0.2s;
 }
 
 .form-control:focus {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 0.25 row rgba(59, 130, 246, 0.25);
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 0.25rem rgba(59, 130, 246, 0.2) !important;
     outline: none;
 }
 
@@ -63,15 +149,37 @@ body {
     margin-top: 5px;
 }
 
+/* ============================================================
+   BUTTONS
+   ============================================================ */
 .btn-primary {
     background-color: var(--accent);
-    border: none;
+    border-color: var(--accent);
     font-weight: 700;
     padding: 12px;
+    color: #ffffff;
 }
-
 .btn-primary:hover {
     background-color: var(--accent-hover);
+    border-color: var(--accent-hover);
+    color: #ffffff;
+}
+
+/* REBOOT-Button — funktioniert in beiden Modi */
+.btn-outline-themed {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-weight: 600;
+    border-radius: 6px;
+    padding: 6px 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.btn-outline-themed:hover {
+    border-color: var(--text-muted);
+    color: var(--text-main);
+    background: var(--bg-infobox);
 }
 
 .btn-back {
@@ -82,37 +190,11 @@ body {
     text-decoration: none;
     transition: color 0.2s;
 }
-
-.btn-back:hover { 
-    color: var(--text-main) !important; 
+.btn-back:hover {
+    color: var(--text-main) !important;
 }
 
-.info-box {
-    background: rgba(15, 23, 42, 0.5); /* Tieferes Blau für Kontrast innerhalb der Karte */
-    padding: 15px;
-    border-radius: 10px;
-    font-size: 0.9rem;
-    border: 1px solid var(--border);
-}
-
-.status-dot {
-    height: 10px;
-    width: 10px;
-    border-radius: 50%;
-    display: inline-block;
-    margin-right: 5px;
-}
-.status-dot.online {
-    background-color: var(--success);
-    animation: pulse 2s infinite;
-}
-.status-dot.offline { background-color: var(--danger); }
-
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.3; }
-}
-
+/* Gerät entfernen × */
 .btn-remove {
     background: none;
     border: none;
@@ -129,60 +211,44 @@ body {
     background: rgba(239, 68, 68, 0.1);
 }
 
-/* Scan-Modus Umschalter */
-.scan-mode-toggle {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-}
-
-.scan-option {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    padding: 14px 10px;
-    border: 2px solid var(--border);
-    border-radius: 12px;
-    cursor: pointer;
-    transition: border-color 0.2s, background 0.2s;
-    text-align: center;
-    background: var(--bg-main);
-}
-
-.scan-option input[type="radio"] { display: none; }
-
-.scan-option:hover {
-    border-color: var(--accent);
-    background: rgba(59, 130, 246, 0.05);
-}
-
-.scan-option.active {
-    border-color: var(--accent);
-    background: rgba(59, 130, 246, 0.12);
-}
-
-.scan-icon { font-size: 1.5rem; }
-.scan-label { font-weight: 700; font-size: 0.9rem; color: var(--text-main); }
-.scan-desc  { font-size: 0.75rem; color: var(--text-muted); }
-
-.alert-mdns {
-    background: rgba(59, 130, 246, 0.08);
-    border: 1px solid rgba(59, 130, 246, 0.3);
-    border-radius: 10px;
+/* ============================================================
+   INFO-BOX (Firmware, Signal, Uptime)
+   ============================================================ */
+.info-box {
+    background: var(--bg-infobox);
     padding: 14px;
-    font-size: 0.88rem;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    border: 1px solid var(--border);
     color: var(--text-main);
-    line-height: 1.6;
 }
 
-.alert-mdns code {
-    background: rgba(0,0,0,0.3);
-    padding: 1px 5px;
-    border-radius: 4px;
-    font-size: 0.8rem;
+/* ============================================================
+   STATUS-DOT
+   ============================================================ */
+.status-dot {
+    height: 10px;
+    width: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 5px;
+    flex-shrink: 0;
+}
+.status-dot.online {
+    background-color: var(--success);
+    animation: pulse-dot 2s infinite;
+}
+.status-dot.offline {
+    background-color: var(--danger);
+}
+@keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.3; }
 }
 
+/* ============================================================
+   GRUPPEN
+   ============================================================ */
 .group-header {
     border-bottom: 1px solid var(--border);
     padding-bottom: 10px;
@@ -196,22 +262,36 @@ body {
     color: var(--text-muted);
 }
 
+/* ============================================================
+   BADGES & LINKS
+   ============================================================ */
 .group-badge {
     font-size: 0.72rem;
     font-weight: 600;
     color: var(--text-muted);
-    background: rgba(51, 65, 85, 0.6);
+    background: var(--bg-badge);
     border: 1px solid var(--border);
     border-radius: 6px;
     padding: 2px 8px;
     cursor: pointer;
-    transition: color 0.2s, background 0.2s;
+    transition: color 0.2s, background 0.2s, border-color 0.2s;
     white-space: nowrap;
 }
 .group-badge:hover {
     color: var(--accent);
     background: rgba(59, 130, 246, 0.1);
     border-color: var(--accent);
+}
+
+.model-badge {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--bg-badge);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 1px 6px;
+    letter-spacing: 0.03em;
 }
 
 .device-ip-link {
@@ -221,50 +301,105 @@ body {
 }
 .device-ip-link:hover { color: var(--accent); }
 
-/* Modell-Badge */
-.model-badge {
-    font-size: 0.68rem;
-    font-weight: 600;
-    color: var(--text-muted);
-    background: rgba(51, 65, 85, 0.5);
-    border: 1px solid var(--border);
-    border-radius: 5px;
-    padding: 1px 6px;
-    letter-spacing: 0.03em;
-}
-
-/* Energie-Box */
+/* ============================================================
+   ENERGIE-BOX
+   ============================================================ */
 .energy-box {
     background: rgba(234, 179, 8, 0.06);
     border: 1px solid rgba(234, 179, 8, 0.25);
     border-radius: 8px;
     padding: 10px 12px;
+    margin-bottom: 10px;
 }
-
 .energy-label {
     font-size: 0.82rem;
     color: var(--text-muted);
     font-weight: 600;
 }
-
 .energy-watts {
     font-size: 1.05rem;
     font-weight: 700;
     color: var(--text-muted);
     transition: color 0.4s;
 }
-
 .energy-watts.energy-active {
-    color: #eab308;
+    color: #ca8a04;   /* etwas dunkler als reines Gelb — in beiden Modi lesbar */
 }
-
+html[data-theme="light"] .energy-watts.energy-active {
+    color: #92400e;   /* Braun-Amber für Light Mode — klar lesbar auf weiß */
+}
 .energy-meta {
     font-size: 0.78rem;
     color: var(--text-muted);
     margin-top: 4px;
 }
 
+/* ============================================================
+   SCAN-MODUS TOGGLE (Settings)
+   ============================================================ */
+.scan-mode-toggle {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+.scan-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 14px 10px;
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    text-align: center;
+    background: var(--bg-main);
+}
+.scan-option input[type="radio"] { display: none; }
+.scan-option:hover {
+    border-color: var(--accent);
+    background: rgba(59, 130, 246, 0.05);
+}
+.scan-option.active {
+    border-color: var(--accent);
+    background: rgba(59, 130, 246, 0.1);
+}
+.scan-icon  { font-size: 1.5rem; }
+.scan-label { font-weight: 700; font-size: 0.9rem; color: var(--text-main); }
+.scan-desc  { font-size: 0.75rem; color: var(--text-muted); }
+
+/* ============================================================
+   mDNS HINWEIS
+   ============================================================ */
+.alert-mdns {
+    background: rgba(59, 130, 246, 0.08);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    border-radius: 10px;
+    padding: 14px;
+    font-size: 0.88rem;
+    color: var(--text-main);
+    line-height: 1.6;
+}
+.alert-mdns code {
+    background: var(--bg-code);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    color: var(--text-main);
+}
+
+/* ============================================================
+   OFFLINE-KARTE
+   ============================================================ */
 .card-offline {
     opacity: 0.5;
     filter: grayscale(40%);
+}
+
+/* ============================================================
+   SORTABLE GHOST
+   ============================================================ */
+.sortable-ghost {
+    opacity: 0.35;
+    border: 2px dashed var(--accent);
 }

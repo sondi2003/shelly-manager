@@ -102,5 +102,18 @@ body {
     display: inline-block;
     margin-right: 5px;
 }
-.status-dot.online { background-color: var(--success); }
+.status-dot.online {
+    background-color: var(--success);
+    animation: pulse 2s infinite;
+}
 .status-dot.offline { background-color: var(--danger); }
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+.card-offline {
+    opacity: 0.5;
+    filter: grayscale(40%);
+}

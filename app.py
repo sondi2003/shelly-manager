@@ -7,7 +7,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s: %(message)s')
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)
+app.secret_key = os.environ.get('SECRET_KEY', 'bitte-in-.env-setzen')
 DB_PATH = '/app/data/users.db'
 
 # GitHub API URL fuer das offizielle Mongoose Repository
@@ -36,7 +36,8 @@ def init_db():
     if 'position' not in columns:
         try:
             conn.execute('ALTER TABLE devices ADD COLUMN position INTEGER DEFAULT 0')
-        except: pass
+        except Exception as e:
+            logging.warning(f"ALTER TABLE fehlgeschlagen: {e}")
 
     if not conn.execute('SELECT * FROM users WHERE username = "admin"').fetchone():
         conn.execute('INSERT INTO users (username, password) VALUES (?, ?)', ('admin', generate_password_hash('admin')))
@@ -129,7 +130,8 @@ def get_shelly_status(args):
                 if comp.get("type") == 0:
                     device_data["ison"] = not comp.get("state", False)
                     break
-    except: pass
+    except Exception as e:
+        logging.warning(f"Fehler beim Abrufen von {ip}: {e}")
     return device_data
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -189,7 +191,8 @@ def scan():
             end_ip = ipaddress.IPv4Address(parts[1].strip()) if '.' in parts[1] else ipaddress.IPv4Address(f"{'.'.join(parts[0].split('.')[:-1])}.{parts[1].strip()}")
             for ip_int in range(int(start_ip), int(end_ip) + 1):
                 all_ips.append(str(ipaddress.IPv4Address(ip_int)))
-    except: pass
+    except Exception as e:
+        logging.error(f"Ungültiger IP-Bereich '{ip_input}': {e}")
     with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
         found = [r for r in list(executor.map(discover_shelly, all_ips)) if r is not None]
     conn = get_db()
@@ -203,7 +206,8 @@ def discover_shelly(ip):
         res = requests.get(f"http://{ip}/rpc/Shelly.GetInfoExt", auth=HTTPDigestAuth('admin', pwd), timeout=1.5)
         if res.status_code == 200:
             return {"ip": ip, "name": res.json().get("name") or f"Shelly-{ip.split('.')[-1]}"}
-    except: pass
+    except Exception as e:
+        logging.debug(f"Kein Shelly auf {ip}: {e}")
     return None
 
 @app.route('/update_order', methods=['POST'])
@@ -232,7 +236,8 @@ def control():
                 payload = {"id": target_id, "type": 0, "state": {"state": new_hardware_state}}
                 res = requests.post(url, json=payload, auth=HTTPDigestAuth('admin', pwd), timeout=4)
                 if res.status_code == 200 and "component not found" not in res.text: return jsonify({"success": True})
-    except: pass
+    except Exception as e:
+        logging.warning(f"Steuerbefehl fehlgeschlagen ({ip}, {action}): {e}")
     return jsonify({"success": False})
 
 @app.route('/settings', methods=['GET', 'POST'])

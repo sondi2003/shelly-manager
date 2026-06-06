@@ -1,82 +1,115 @@
-# Shelly Manager 🐚
+<div align="center">
 
-Ein leichtgewichtiger, Docker-basierter Manager für Shelly-Geräte mit der **[Mongoose OS HomeKit Firmware](https://github.com/mongoose-os-apps/shelly-homekit)**. Zentrales Dashboard zum Steuern, Überwachen und Aktualisieren aller Geräte im Netzwerk.
+# 🐚 Shelly Manager
+
+**A clean, self-hosted dashboard for Shelly devices running the [Mongoose OS HomeKit Firmware](https://github.com/mongoose-os-apps/shelly-homekit)**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
+[![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](requirements.txt)
+[![Flask](https://img.shields.io/badge/Flask-3.1-000000?logo=flask&logoColor=white)](requirements.txt)
+
+[Features](#-features) · [Quick Start](#-quick-start) · [API](#-api-tokens) · [Wiki](../../wiki)
+
+</div>
+
+---
+
+> **Note:** This project is specifically built for Shelly devices flashed with the **Mongoose OS HomeKit firmware** (`shelly-homekit`). It will not work with the official Shelly firmware.
 
 ---
 
 ## ✨ Features
 
-- **Dashboard** — alle Shellys auf einen Blick: Status, Signal, Uptime, Firmware
-- **Gruppen** — Geräte in Räume einteilen, ganze Gruppen ein-/ausschalten
-- **Live-Uptime** — tickt sekündlich im Browser ohne Seitenreload
-- **Firmware-Check** — prüft automatisch via GitHub ob Updates verfügbar sind
-- **OTA-Update** — Firmware-Update per Klick, auch für alle Geräte gleichzeitig
-- **Energieverbrauch** — Watt, Volt, Ampere für Geräte mit Strommessung (Plug S, 1PM etc.)
-- **Netzwerk-Scan** — IP-Bereich oder mDNS (automatisch)
-- **API-Tokens** — externer Zugriff für Home Assistant, Skripte etc.
-- **Dark / Light Mode** — umschaltbar, wird gespeichert
-- **Drag & Drop** — Reihenfolge der Karten frei sortierbar
-- **Docker** — komplett containerisiert, Daten bleiben bei Updates erhalten
+| | |
+|---|---|
+| 📊 **Live Dashboard** | All your devices at a glance — status, signal strength, uptime, firmware version |
+| 🏠 **Rooms & Groups** | Organize devices into rooms, control an entire group with one click |
+| ⚡ **Energy Monitoring** | Real-time power consumption (W/V/A) for Plug S, 1PM, 2.5 and other metering devices |
+| 🔄 **OTA Updates** | Check & apply firmware updates directly from the dashboard, including bulk update |
+| 🌐 **Auto-Discovery** | Scan IP ranges or use mDNS to find devices automatically |
+| 🔑 **API Tokens** | Integrate with Home Assistant, scripts, or any HTTP client — no browser required |
+| 🌙 **Dark / Light Mode** | Smooth theme toggle, preference saved in browser |
+| 🔒 **Secure by default** | First-run setup wizard, no default credentials, digest auth for Shelly devices |
+| 🐳 **Docker-native** | Single container, data persists across updates via volume mount |
 
 ---
 
-## 🚀 Installation
+## 📸 Screenshot
 
-### Voraussetzungen
-- Docker & Docker Compose
+<!-- Replace with your actual screenshot -->
+> *Dashboard screenshot coming soon*
 
-### 1. Repository klonen
+---
+
+## ⚡ Quick Start
+
+**Requirements:** Docker & Docker Compose
 
 ```bash
-git clone https://github.com/DEIN_USERNAME/shelly-manager.git
+# 1. Clone the repository
+git clone https://github.com/YOUR_USERNAME/shelly-manager.git
 cd shelly-manager
-```
 
-### 2. Konfiguration anlegen
-
-```bash
+# 2. Create your configuration
 cp .env.example .env
-```
+# Edit .env — set HOST_PORT, APP_DB_PATH and SECRET_KEY
 
-Öffne `.env` und setze mindestens:
-
-```env
-HOST_PORT=8095
-APP_DB_PATH=./data
-SECRET_KEY=hier-einen-langen-zufaelligen-string    # openssl rand -hex 32
-```
-
-### 3. Container starten
-
-```bash
+# 3. Build and start
 docker-compose up --build -d
+
+# 4. Open your browser
+# → http://your-server:8095
+# The setup wizard will guide you through the first-run configuration.
 ```
 
-### 4. Setup-Wizard
-
-Beim ersten Start öffne `http://dein-server:8095` im Browser.  
-Du wirst automatisch zum **Ersteinrichtungs-Wizard** weitergeleitet wo du:
-- das Admin-Passwort setzt
-- den IP-Scan Bereich konfigurierst
-- das Shelly-Passwort einträgst (falls gesetzt)
+→ **Detailed installation guide:** [Wiki — Installation](../../wiki/Installation)
 
 ---
 
-## ⚙️ Konfiguration
+## 🔑 API Tokens
 
-### Umgebungsvariablen (`.env`)
+Shelly Manager supports token-based authentication for external access — no browser login required.
 
-| Variable | Beschreibung | Pflicht |
-|---|---|---|
-| `HOST_PORT` | Port des Dashboards | ✅ |
-| `APP_DB_PATH` | Pfad für die SQLite-Datenbank | ✅ |
-| `SECRET_KEY` | Geheimer Schlüssel für Sessions | ✅ |
-| `ADMIN_PASSWORD` | Admin-Passwort direkt setzen (überspringt Wizard) | — |
-| `FLASK_ENV` | `production` (Standard) | — |
+Create a token in **Settings → API Tokens**, then use it in any HTTP client:
 
-### Updates durchführen
+```bash
+# Turn on a single device
+curl -X POST http://your-server:8095/control \
+  -H "X-API-Token: sm_your-token-here" \
+  -H "Content-Type: application/json" \
+  -d '{"ip": "192.168.1.50", "action": "state", "value": "on"}'
 
-Deine Daten (Gerätliste, Gruppen, Tokens) liegen im `data/`-Ordner als SQLite-Datenbank und bleiben bei Updates erhalten.
+# Control an entire group
+curl -X POST http://your-server:8095/control_group \
+  -H "X-API-Token: sm_your-token-here" \
+  -H "Content-Type: application/json" \
+  -d '{"group": "Living Room", "action": "off"}'
+```
+
+→ **Full API reference:** [Wiki — API Reference](../../wiki/API-Reference)
+
+---
+
+## 🏠 Home Assistant
+
+```yaml
+# configuration.yaml
+rest_command:
+  shelly_livingroom_on:
+    url: "http://your-server:8095/control_group"
+    method: POST
+    headers:
+      X-API-Token: "sm_your-token-here"
+      Content-Type: "application/json"
+    payload: '{"group": "Living Room", "action": "on"}'
+```
+
+---
+
+## 🔄 Updating
+
+Your device list, groups, settings and API tokens are stored in a SQLite database mounted as a Docker volume. **They are preserved across updates.**
 
 ```bash
 git pull
@@ -85,66 +118,24 @@ docker-compose up --build -d
 
 ---
 
-## 🔑 API-Token Nutzung
+## 🤝 Contributing
 
-Tokens ermöglichen externen Tools den Zugriff ohne Browser-Login.
+Contributions are welcome! Please open an issue first to discuss what you'd like to change.
 
-**Token erstellen:** Einstellungen → API-Tokens → Name eingeben → Token erstellen
-
-**Token verwenden:**
-
-```bash
-# Gerät einschalten
-curl -X POST http://dein-server:8095/control \
-  -H "Content-Type: application/json" \
-  -H "X-API-Token: sm_dein-token" \
-  -d '{"ip": "192.168.1.50", "action": "state", "value": "on"}'
-
-# Gruppe ausschalten
-curl -X POST http://dein-server:8095/control_group \
-  -H "Content-Type: application/json" \
-  -H "X-API-Token: sm_dein-token" \
-  -d '{"group": "Wohnzimmer", "action": "off"}'
-
-# Status aller Geräte
-curl http://dein-server:8095/status \
-  -H "X-API-Token: sm_dein-token"
-```
-
-### Home Assistant Beispiel
-
-```yaml
-rest_command:
-  shelly_wohnzimmer_an:
-    url: "http://dein-server:8095/control_group"
-    method: POST
-    headers:
-      X-API-Token: "sm_dein-token"
-      Content-Type: "application/json"
-    payload: '{"group": "Wohnzimmer", "action": "on"}'
-```
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
+4. Push the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ---
 
-## 🌐 mDNS (optional)
+## 📄 License
 
-Wenn der Container im lokalen Netz läuft (nicht in der Cloud), kann mDNS Geräte automatisch ohne IP-Konfiguration finden.  
-Dazu in `docker-compose.yml` `network_mode: host` aktivieren und mDNS in den Einstellungen wählen.
-
----
-
-## 🤝 Mitwirken
-
-Pull Requests sind willkommen!
-
-1. Fork erstellen
-2. Feature-Branch anlegen (`git checkout -b feature/mein-feature`)
-3. Änderungen committen (`git commit -m 'feat: mein feature'`)
-4. Branch pushen (`git push origin feature/mein-feature`)
-5. Pull Request öffnen
+Distributed under the MIT License. See [LICENSE](LICENSE) for details.
 
 ---
 
-## 📄 Lizenz
-
-MIT License — siehe [LICENSE](LICENSE)
+<div align="center">
+<sub>Built with ❤️ for the Mongoose OS / shelly-homekit community</sub>
+</div>

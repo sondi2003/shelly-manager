@@ -8,7 +8,7 @@
     <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
     <script>(function(){ document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'dark'); })();</script>
 </head>
-<body>
+<body class="no-navbar">
     <div class="container py-5" style="max-width: 520px;">
         <div class="card p-4 shadow">
             <h3 class="mb-4 text-center fw-bold">Konfiguration</h3>
@@ -66,7 +66,7 @@
                            value="{{ shelly_pwd }}" placeholder="Passwort der Shelly-Geräte">
                 </div>
 
-                <hr style="border-color: var(--border); margin: 1.5rem 0;">
+                <hr class="my-4">
 
                 <div class="mb-4">
                     <label class="form-label">Admin Passwort ändern</label>
@@ -78,14 +78,12 @@
             </form>
 
             <!-- API-Token Verwaltung -->
-            <hr style="border-color: var(--border); margin: 2rem 0;">
+            <hr class="my-4">
 
-            <h6 class="text-muted text-uppercase small fw-bold mb-3" style="letter-spacing: 0.1em;">
-                API-Tokens
-            </h6>
-            <p class="small" style="color: var(--text-muted);">
+            <h6 class="section-label mb-3">API-Tokens</h6>
+            <p class="text-muted small">
                 Tokens erlauben externen Tools (z.B. Home Assistant, Skripte) den Zugriff ohne Browser-Login.
-                Sende den Token im Header: <code style="background:var(--bg-code); padding: 1px 5px; border-radius:4px;">X-API-Token: sm_...</code>
+                Sende den Token im Header: <code>X-API-Token: sm_...</code>
             </p>
 
             <!-- Bestehende Tokens -->

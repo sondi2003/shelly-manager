@@ -8,7 +8,7 @@
     <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
     <script>(function(){ document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'dark'); })();</script>
 </head>
-<body class="d-flex align-items-center justify-content-center" style="height: 100vh; padding: 0;">
+<body class="no-navbar d-flex align-items-center justify-content-center" style="min-height: 100vh;">
     <div class="card p-4 shadow" style="width: 350px;">
         <h3 class="mb-4 text-center fw-bold text-white">System Login</h3>
         <form action="/login" method="post">

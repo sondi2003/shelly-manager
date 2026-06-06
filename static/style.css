@@ -56,7 +56,39 @@ body {
     background-color: var(--bg-main);
     color: var(--text-main);
     font-family: 'Inter', sans-serif;
-    padding-top: 90px;
+    padding-top: 90px;   /* Abstand für fixe Navbar (Dashboard) */
+}
+
+/* Seiten ohne Navbar brauchen keinen Navbar-Abstand */
+body.no-navbar {
+    padding-top: 0;
+}
+
+/* ── Bootstrap-Overrides für Theme-Kompatibilität ─────────── */
+
+/* Bootstrap .text-muted ignoriert unsere Variable — hier überschreiben */
+.text-muted {
+    color: var(--text-muted) !important;
+}
+
+/* Überschriften immer in Hauptfarbe */
+h1, h2, h3, h4, h5, h6 {
+    color: var(--text-main);
+}
+
+/* Code-Elemente: Hintergrund + Textfarbe aus Variablen */
+code {
+    background: var(--bg-code);
+    color: var(--text-main);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 0.85em;
+}
+
+/* Bootstrap hr */
+hr {
+    border-color: var(--border);
+    opacity: 1;
 }
 
 /* ============================================================
@@ -394,6 +426,17 @@ html[data-theme="light"] .energy-watts.energy-active {
 .card-offline {
     opacity: 0.5;
     filter: grayscale(40%);
+}
+
+/* ============================================================
+   ABSCHNITTS-ÜBERSCHRIFT (Settings, Setup)
+   ============================================================ */
+.section-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
 }
 
 /* ============================================================

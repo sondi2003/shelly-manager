@@ -205,16 +205,35 @@ def get_shelly_status(args):
                 "model":      d.get("model", ""),
             })
             for comp in d.get("components", []):
-                state = comp.get("state", {})
-                if isinstance(state, dict):
-                    if comp.get("type") == 0:
-                        device_data["ison"] = not state.get("state", False)
-                    power = state.get("apower") if state.get("apower") is not None else state.get("power")
-                    if power is not None:
-                        device_data["power_w"]   = round(float(power), 1)
-                        device_data["voltage"]   = round(float(state["voltage"]), 1) if state.get("voltage") else None
-                        device_data["current"]   = round(float(state["current"]), 2) if state.get("current") else None
-                        device_data["has_meter"] = True
+                # Shelly.GetInfoExt liefert die Switch-Felder FLACH auf der Komponente:
+                # {"id":0,"type":0,"state":true,"apower":..,"voltage":..,"current":..}.
+                # 'state' ist ein Boolean (true = Relais EIN), KEIN verschachteltes Objekt.
+                # Defensiv unterstützen wir trotzdem beide Formen (flach + alt verschachtelt).
+                st = comp.get("state")
+                nested = st if isinstance(st, dict) else {}
+
+                # kSwitch (0) / kOutlet (1) = schaltbares Relais
+                if comp.get("type") in (0, 1):
+                    if isinstance(st, bool):
+                        device_data["ison"] = st
+                    elif nested:
+                        device_data["ison"] = bool(nested.get("state", False))
+
+                # Leistungswerte: je nach Firmware flach auf comp oder im state-Objekt
+                def pick(key):
+                    v = comp.get(key)
+                    return v if v is not None else nested.get(key)
+
+                power = pick("apower")
+                if power is None:
+                    power = pick("power")
+                if power is not None:
+                    voltage = pick("voltage")
+                    current = pick("current")
+                    device_data["power_w"]   = round(float(power), 1)
+                    device_data["voltage"]   = round(float(voltage), 1) if voltage is not None else None
+                    device_data["current"]   = round(float(current), 2) if current is not None else None
+                    device_data["has_meter"] = True
     except Exception as e:
         logging.warning(f"Fehler beim Abrufen von {ip}: {e}")
     return device_data
@@ -372,11 +391,13 @@ def control():
                           auth=HTTPDigestAuth('admin', pwd), timeout=5)
             return jsonify({"success": True})
         if action == "state":
-            new_state = False if val == 'on' else True
+            new_state = (val == 'on')   # Firmware: state=true bedeutet EIN
             for target_id in [0, 1]:
                 res = requests.post(f"http://{ip}/rpc/Shelly.SetState",
                                     json={"id": target_id, "type": 0, "state": {"state": new_state}},
                                     auth=HTTPDigestAuth('admin', pwd), timeout=4)
+                logging.info(f"[CTRL] {ip} SetState id={target_id} state={new_state} "
+                             f"-> HTTP {res.status_code}: {res.text[:120]!r}")
                 if res.status_code == 200 and "component not found" not in res.text:
                     return jsonify({"success": True})
     except Exception as e:
@@ -392,7 +413,7 @@ def control_group():
     conn   = get_db()
     db_devices = conn.execute('SELECT ip FROM devices WHERE group_name = ?', (group,)).fetchall()
     conn.close()
-    new_state = False if action == 'on' else True
+    new_state = (action == 'on')   # Firmware: state=true bedeutet EIN
     results = []
     for d in db_devices:
         ip = d['ip']

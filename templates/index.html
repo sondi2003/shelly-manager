@@ -124,8 +124,9 @@
                             </div>
                             {% endif %}
                             <div class="d-flex gap-2">
-                                <button class="btn btn-{% if d.ison %}success{% else %}warning{% endif %} flex-grow-1 fw-bold"
-                                        onclick="sendCmd('{{ d.ip }}', 'state', '{% if d.ison %}off{% else %}on{% endif %}')">
+                                <button class="btn power-btn btn-{% if d.ison %}success{% else %}warning{% endif %} flex-grow-1 fw-bold"
+                                        data-ison="{% if d.ison %}1{% else %}0{% endif %}"
+                                        onclick="togglePower('{{ d.ip }}')">
                                     {% if d.ison %}AN{% else %}AUS{% endif %}
                                 </button>
                                 <button class="btn-outline-themed" onclick="confirmReboot('{{ d.ip }}', '{{ d.name }}')">REBOOT</button>
@@ -207,8 +208,37 @@
                     }
                     const uptimeEl = card.querySelector('.uptime-display');
                     if (uptimeEl) uptimeEl.setAttribute('data-seconds', dev.uptime);
+                    // AN/AUS-Button an den realen Gerätezustand angleichen
+                    // (auch bei Änderungen über iPhone/extern)
+                    setPowerButton(card, dev.ison);
                 }
             });
+        }).catch(() => {});
+    }
+
+    // Setzt Farbe, Label und gespeicherten Zustand des AN/AUS-Buttons einer Kachel
+    function setPowerButton(card, ison) {
+        const btn = card.querySelector('.power-btn');
+        if (!btn) return;
+        btn.setAttribute('data-ison', ison ? '1' : '0');
+        btn.classList.toggle('btn-success', !!ison);
+        btn.classList.toggle('btn-warning', !ison);
+        btn.innerText = ison ? 'AN' : 'AUS';
+    }
+
+    // Schaltet anhand des AKTUELLEN Zustands (nicht eines fest eingebackenen Werts)
+    function togglePower(ip) {
+        const card = document.querySelector(`.device-card[data-ip="${ip}"]`);
+        const btn  = card ? card.querySelector('.power-btn') : null;
+        const isOn = btn && btn.getAttribute('data-ison') === '1';
+        const target = isOn ? 'off' : 'on';
+        fetch('/control', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ip: ip, action: 'state', value: target})
+        }).then(r => r.json()).then(data => {
+            if (data.success && card) setPowerButton(card, target === 'on');  // optimistisch
+            setTimeout(fetchStatus, 1200);  // echten Zustand kurz danach bestätigen
         }).catch(() => {});
     }
 

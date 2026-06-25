@@ -1,8 +1,16 @@
-import os, sqlite3, requests, json, concurrent.futures, ipaddress, time, logging, socket, secrets
+import os, sqlite3, requests, json, concurrent.futures, ipaddress, time, logging, socket, secrets, threading
 from functools import wraps
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 from requests.auth import HTTPDigestAuth
 from werkzeug.security import generate_password_hash, check_password_hash
+
+# Logging MUSS vor dem ersten logging-Aufruf (z.B. zeroconf-Warnung unten) konfiguriert
+# werden, sonst richtet der erste Aufruf den Root-Logger implizit auf Level WARNING ein
+# und basicConfig wird zum No-Op -> alle info()-Logs (z.B. [OTA] ...) verschwinden.
+# force=True überschreibt einen bereits vorhandenen Handler.
+logging.basicConfig(level=logging.INFO,
+                    format='[%(asctime)s] %(levelname)s: %(message)s',
+                    force=True)
 
 try:
     from zeroconf import ServiceBrowser, Zeroconf
@@ -11,14 +19,33 @@ except ImportError:
     MDNS_AVAILABLE = False
     logging.warning("zeroconf nicht installiert — mDNS-Scan nicht verfügbar.")
 
-logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s: %(message)s')
-
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'bitte-in-.env-setzen')
 DB_PATH = '/app/data/users.db'
 
 GITHUB_RELEASE_URL = "https://api.github.com/repos/mongoose-os-apps/shelly-homekit/releases/latest"
+# Firmware-Download-Quelle (modell-spezifisch, latest stable). Wir laden die Zip selbst
+# herunter und laden sie dann ans Gerät hoch – daher hier NICHT der Universal-Link
+# (der erkennt das Gerät an dessen eigenen Request-Headern, die wir nicht haben).
+OTA_FW_URL_TEMPLATE = "http://rojer.me/files/shelly/shelly-homekit-{model}.zip"
 cache = {"latest_version": None, "last_check": 0}
+
+# Fortschritt laufender Firmware-Updates, je Geräte-IP. Wird vom Hintergrund-Thread
+# geschrieben und vom Frontend per /update_status gepollt (Fortschrittsbalken in der Kachel).
+update_progress = {}
+progress_lock   = threading.Lock()
+
+def set_progress(ip, percent, stage, done=False, success=None, error=None):
+    now = time.time()
+    with progress_lock:
+        update_progress[ip] = {
+            "percent": percent, "stage": stage,
+            "done": done, "success": success, "error": error, "ts": now,
+        }
+        # Alte, abgeschlossene Einträge aufräumen, damit der Speicher nicht wächst.
+        for old in [k for k, v in update_progress.items()
+                    if v.get("done") and now - v.get("ts", 0) > 300]:
+            del update_progress[old]
 
 # ──────────────────────────────────────────────────────────────
 # DATENBANK
@@ -416,23 +443,114 @@ def scan():
     logging.info(f"Scan abgeschlossen: {len(found)} Gerät(e) gefunden.")
     return jsonify({"success": True, "count": len(found), "mode": scan_mode})
 
+def flash_shelly(ip, pwd):
+    """Lädt die passende Firmware-Zip herunter und lädt sie ans Gerät hoch –
+    exakt wie es die Firmware-Weboberfläche selbst macht:
+      1. Modell per Shelly.GetInfoExt ermitteln
+      2. Zip von rojer.me herunterladen
+      3. Zip per multipart POST an http://<ip>/update hochladen (Feld 'file')
+    Gibt (success: bool, message: str) zurück.
+    """
+    auth = HTTPDigestAuth('admin', pwd)
+    # 1) Modell ermitteln
+    set_progress(ip, 10, "Ermittle Modell…")
+    res_info = requests.get(f"http://{ip}/rpc/Shelly.GetInfoExt", auth=auth, timeout=3)
+    logging.info(f"[OTA] {ip} GetInfoExt -> HTTP {res_info.status_code}")
+    if res_info.status_code != 200:
+        return False, f"Gerät nicht erreichbar / Auth fehlgeschlagen (HTTP {res_info.status_code})"
+    info  = res_info.json()
+    model = info.get("model", "")
+    logging.info(f"[OTA] {ip} model={model!r} version={info.get('version')!r}")
+    if not model:
+        return False, "Modell konnte nicht ermittelt werden"
+
+    # 2) Firmware-Zip herunterladen
+    fw_url = OTA_FW_URL_TEMPLATE.format(model=model)
+    set_progress(ip, 25, f"Lade Firmware ({model})…")
+    logging.info(f"[OTA] {ip} lade Firmware {fw_url}")
+    res_fw = requests.get(fw_url, timeout=30)
+    if res_fw.status_code != 200 or not res_fw.content:
+        return False, f"Firmware-Download fehlgeschlagen (HTTP {res_fw.status_code}) von {fw_url}"
+    logging.info(f"[OTA] {ip} Firmware geladen: {len(res_fw.content)} Bytes")
+    set_progress(ip, 45, "Firmware geladen")
+
+    # 3) Zip ans Gerät hochladen (das löst Flash + Reboot aus)
+    set_progress(ip, 55, "Lade auf Gerät hoch…")
+    logging.info(f"[OTA] {ip} lade Firmware hoch -> POST http://{ip}/update")
+    files  = {"file": (f"shelly-homekit-{model}.zip", res_fw.content, "application/zip")}
+    res_up = requests.post(f"http://{ip}/update", files=files, auth=auth, timeout=120)
+    body = (res_up.text or "").strip()
+    logging.info(f"[OTA] {ip} /update -> HTTP {res_up.status_code}; Antwort: {body[:300]!r}")
+    if res_up.status_code != 200:
+        return False, f"Upload abgelehnt (HTTP {res_up.status_code}): {body[:200]}"
+    set_progress(ip, 85, "Geflasht – Gerät startet neu…")
+    return True, body[:200] or "Update gestartet"
+
+def wait_for_reboot(ip, pwd, latest, timeout=120):
+    """Wartet, bis das Gerät nach dem Flash wieder erreichbar ist, und treibt den
+    Balken währenddessen von 88% auf 99%. Gibt die erkannte Version zurück (oder None)."""
+    auth = HTTPDigestAuth('admin', pwd)
+    start, attempt = time.time(), 0
+    while time.time() - start < timeout:
+        attempt += 1
+        pct = min(99, 88 + attempt)
+        try:
+            r = requests.get(f"http://{ip}/rpc/Shelly.GetInfoExt", auth=auth, timeout=3)
+            if r.status_code == 200:
+                ver = r.json().get("version", "")
+                if latest and ver == latest:
+                    return ver
+                set_progress(ip, pct, f"Neustart… (v{ver})")
+            else:
+                set_progress(ip, pct, "Gerät startet neu…")
+        except Exception:
+            set_progress(ip, pct, "Gerät startet neu…")
+        time.sleep(3)
+    # Letzter Versuch, die Version zu lesen
+    try:
+        r = requests.get(f"http://{ip}/rpc/Shelly.GetInfoExt", auth=auth, timeout=3)
+        if r.status_code == 200:
+            return r.json().get("version", "")
+    except Exception:
+        pass
+    return None
+
+def update_worker(ip, pwd):
+    """Hintergrund-Job: führt das Update aus und schreibt den Fortschritt nach update_progress."""
+    logging.info(f"[OTA] === Update-Worker gestartet für {ip} ===")
+    set_progress(ip, 5, "Starte…")
+    try:
+        success, message = flash_shelly(ip, pwd)
+    except Exception as e:
+        logging.error(f"[OTA] {ip} Ausnahme: {type(e).__name__}: {e}")
+        set_progress(ip, 0, "Fehler", done=True, success=False, error=f"{type(e).__name__}: {e}")
+        return
+    if not success:
+        logging.warning(f"[OTA] {ip} fehlgeschlagen: {message}")
+        set_progress(ip, 0, "Fehlgeschlagen", done=True, success=False, error=message)
+        return
+    ver = wait_for_reboot(ip, pwd, get_latest_version())
+    logging.info(f"[OTA] {ip} OK – neue Version: {ver}")
+    set_progress(ip, 100, f"Fertig – v{ver}" if ver else "Fertig", done=True, success=True)
+
+def start_update(ip, pwd):
+    """Startet den Update-Thread für ip, falls nicht bereits eines läuft. Gibt True zurück, wenn gestartet."""
+    with progress_lock:
+        running = ip in update_progress and not update_progress[ip].get("done")
+    if running:
+        return False
+    set_progress(ip, 0, "In Warteschlange…")
+    threading.Thread(target=update_worker, args=(ip, pwd), daemon=True).start()
+    return True
+
 @app.route('/update_device', methods=['POST'])
 @require_auth
 def update_device():
     ip  = request.json.get('ip')
     pwd = get_config("shelly_password")
-    try:
-        res_info = requests.get(f"http://{ip}/rpc/Shelly.GetInfoExt",
-                                auth=HTTPDigestAuth('admin', pwd), timeout=3)
-        if res_info.status_code != 200:
-            return jsonify({"success": False, "error": "Offline"})
-        model   = res_info.json().get("model", "")
-        ota_url = f"http://shelly.rojer.cloud/update/shelly-homekit-{model}.zip"
-        res_upd = requests.get(f"http://{ip}/ota", params={"url": ota_url},
-                               auth=HTTPDigestAuth('admin', pwd), timeout=5)
-        return jsonify({"success": res_upd.status_code == 200})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
+    logging.info(f"[OTA] === Update angefordert für {ip} ===")
+    started = start_update(ip, pwd)
+    return jsonify({"success": True, "started": started})
 
 @app.route('/update_all', methods=['POST'])
 @require_auth
@@ -440,19 +558,19 @@ def update_all():
     latest_v = get_latest_version()
     devices, _ = grouped_devices(latest_v)
     outdated = [d for d in devices if d['status'] == 'Online' and not d['fw_ok']]
-    pwd, results = get_config("shelly_password"), []
-    for dev in outdated:
-        try:
-            res_info = requests.get(f"http://{dev['ip']}/rpc/Shelly.GetInfoExt",
-                                    auth=HTTPDigestAuth('admin', pwd), timeout=3)
-            model   = res_info.json().get("model", "")
-            ota_url = f"http://shelly.rojer.cloud/update/shelly-homekit-{model}.zip"
-            requests.get(f"http://{dev['ip']}/ota", params={"url": ota_url},
-                         auth=HTTPDigestAuth('admin', pwd), timeout=5)
-            results.append(dev['ip'])
-        except Exception as e:
-            logging.warning(f"Update fehlgeschlagen für {dev['ip']}: {e}")
-    return jsonify({"success": True, "updated": results, "count": len(results)})
+    pwd = get_config("shelly_password")
+    logging.info(f"[OTA] === Massenupdate angefordert für {len(outdated)} Gerät(e) ===")
+    started = [dev['ip'] for dev in outdated if start_update(dev['ip'], pwd)]
+    return jsonify({"success": True, "count": len(started), "ips": started})
+
+@app.route('/update_status')
+@require_auth
+def update_status():
+    ip = request.args.get('ip')
+    with progress_lock:
+        if ip:
+            return jsonify(update_progress.get(ip, {}))
+        return jsonify(dict(update_progress))
 
 @app.route('/remove_device', methods=['POST'])
 @require_auth

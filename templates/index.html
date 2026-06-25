@@ -197,7 +197,9 @@
                 if (dev.status === 'Online' && infoBox) {
                     card.querySelector('.fw-display').innerText = dev.version;
                     const fwBtn = card.querySelector('.fw-update-btn');
-                    if (fwBtn) fwBtn.style.display = dev.fw_ok ? 'none' : 'inline';
+                    // Button während eines laufenden Updates nicht wieder einblenden
+                    if (fwBtn && !activeUpdates.has(dev.ip))
+                        fwBtn.style.display = dev.fw_ok ? 'none' : 'inline';
                     const rssiEl = card.querySelector('.rssi-display');
                     if (rssiEl) {
                         rssiEl.innerText = dev.rssi + ' dBm';
@@ -235,6 +237,11 @@
         fetch('/scan', {method: 'POST'}).then(() => location.reload());
     }
 
+    // ── Firmware-Update mit Fortschrittsbalken in der Kachel ─────────────
+    const activeUpdates = new Set();   // IPs mit laufendem Update
+    const handledDone   = new Set();   // bereits abgeschlossen & im UI behandelt
+    let progressTimer   = null;
+
     function startUpdate(ip) {
         if (!confirm('Möchtest du das Firmware-Update für ' + ip + ' wirklich starten?')) return;
         fetch('/update_device', {
@@ -242,9 +249,80 @@
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ip: ip})
         }).then(res => res.json()).then(data => {
-            if (data.success) { alert('Update gestartet!'); location.reload(); }
-            else { alert('Fehler: ' + data.error); }
+            if (data.success) beginProgress(ip);
+            else alert('Fehler: ' + (data.error || 'unbekannt'));
         });
+    }
+
+    function beginProgress(ip) {
+        activeUpdates.add(ip);
+        handledDone.delete(ip);
+        showProgressBar(ip, 0, 'Starte…', 'run');
+        if (!progressTimer) progressTimer = setInterval(pollProgress, 1500);
+    }
+
+    function showProgressBar(ip, percent, stage, state) {
+        const body = document.querySelector(`.device-card[data-ip="${ip}"] .card-body`);
+        if (!body) return;
+        let box = body.querySelector('.update-progress');
+        if (!box) {
+            box = document.createElement('div');
+            box.className = 'update-progress mt-3';
+            box.innerHTML =
+                '<div class="d-flex justify-content-between small mb-1">' +
+                '  <span class="up-stage fw-bold"></span>' +
+                '  <span class="up-pct fw-bold"></span>' +
+                '</div>' +
+                '<div class="progress" style="height:12px;">' +
+                '  <div class="progress-bar up-fill" style="width:0%"></div>' +
+                '</div>';
+            const btn = body.querySelector('.fw-update-btn');
+            if (btn) btn.style.display = 'none';
+            body.appendChild(box);
+        }
+        box.querySelector('.up-stage').innerText = stage;
+        box.querySelector('.up-pct').innerText = percent + '%';
+        const fill = box.querySelector('.up-fill');
+        fill.style.width = percent + '%';
+        if (state === 'error')      fill.className = 'progress-bar up-fill bg-danger';
+        else if (state === 'done')  fill.className = 'progress-bar up-fill bg-success';
+        else                        fill.className = 'progress-bar up-fill progress-bar-striped progress-bar-animated bg-warning';
+    }
+
+    function removeProgressBar(ip) {
+        const body = document.querySelector(`.device-card[data-ip="${ip}"] .card-body`);
+        if (!body) return;
+        const box = body.querySelector('.update-progress');
+        if (box) box.remove();
+        const btn = body.querySelector('.fw-update-btn');
+        if (btn) btn.style.display = '';
+    }
+
+    function pollProgress() {
+        fetch('/update_status').then(r => r.json()).then(map => {
+            let anyActive = false;
+            Object.keys(map).forEach(ip => {
+                const p = map[ip];
+                if (!p || p.percent === undefined) return;
+                if (p.done) {
+                    if (handledDone.has(ip)) return;
+                    handledDone.add(ip);
+                    activeUpdates.delete(ip);
+                    if (p.success) {
+                        showProgressBar(ip, 100, p.stage || 'Fertig', 'done');
+                        setTimeout(() => { removeProgressBar(ip); fetchStatus(); }, 3000);
+                    } else {
+                        showProgressBar(ip, 100, p.error || 'Fehlgeschlagen', 'error');
+                        setTimeout(() => removeProgressBar(ip), 7000);
+                    }
+                } else {
+                    anyActive = true;
+                    activeUpdates.add(ip);
+                    showProgressBar(ip, p.percent, p.stage || '…', 'run');
+                }
+            });
+            if (!anyActive) { clearInterval(progressTimer); progressTimer = null; }
+        }).catch(() => {});
     }
 
     function startRename(el, ip, currentName) {
@@ -314,8 +392,8 @@
         fetch('/update_all', {method: 'POST'})
             .then(r => r.json())
             .then(data => {
-                if (data.success) alert(data.count + ' Gerät(e) wurden zum Update gestartet.');
-                else alert('Fehler beim Massenupdate.');
+                if (!data.success) { alert('Fehler beim Massenupdate.'); return; }
+                (data.ips || []).forEach(beginProgress);
             });
     }
 
@@ -353,6 +431,13 @@
     }
     // Icon beim ersten Laden setzen
     applyTheme(document.documentElement.getAttribute('data-theme') || 'dark');
+
+    // Laufende Updates nach einem Seiten-Reload wieder aufnehmen
+    fetch('/update_status').then(r => r.json()).then(map => {
+        Object.keys(map).forEach(ip => {
+            if (map[ip] && !map[ip].done) beginProgress(ip);
+        });
+    }).catch(() => {});
     </script>
 </body>
 </html>

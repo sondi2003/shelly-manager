@@ -483,3 +483,15 @@ html[data-theme="light"] .energy-watts.energy-active {
     opacity: 0.35;
     border: 2px dashed var(--accent);
 }
+
+/* ============================================================
+   FIRMWARE-UPDATE FORTSCHRITTSBALKEN
+   ============================================================ */
+.update-progress .progress {
+    background-color: var(--bg-infobox);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+}
+.update-progress .up-stage { color: var(--text-main); }
+.update-progress .up-pct   { color: var(--text-muted); }
